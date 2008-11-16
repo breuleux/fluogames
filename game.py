@@ -15,6 +15,9 @@ class Game(util.MiniBot):
 
     def abort(self):
         pass
+
+    def tick(self):
+        pass
     
         
 

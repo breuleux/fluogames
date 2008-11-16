@@ -17,12 +17,14 @@ class GameBot(irc.IRCClient):
     nickname = "LEGO"
 
     def connectionMade(self):
+        self.factory.bots.append(self)
         irc.IRCClient.connectionMade(self)
         if not hasattr(self, 'manager'):
-            self.manager = manager.Manager(self)
+            self.manager = manager.Manager(self, self.factory.db_dir)
             self.manager.add_game('witty', 'witty', 'Witty')
 
     def connectionLost(self, reason):
+        self.factory.bots.remove(self)
         irc.IRCClient.connectionLost(self, reason)
 
     # callbacks for events
@@ -68,28 +70,45 @@ class GameBot(irc.IRCClient):
 #         elif self.game:
 #             self.game.privmsg(user, host, channel, msg)
 
-    def broadcast(self, message):
-        self.msg(self.factory.channel, message)
+    def wrap_msg(self, message, color = False, bold = False, underline = False):
+        if bold:
+            message = '$B%s$B' % message
+        if underline:
+            message = '$U%s$U' % message
+        if color is not False:
+            message = '$C$B$B$i%s$C' % (color, message)
+        return message
+        
+    def broadcast(self, message, color = False, bold = False, underline = False):
+        self.msg(self.factory.channel, message, color, bold, underline)
 
-    def msg(self, user, message):
+    def msg(self, user, message, color = False, bold = False, underline = False):
+        message = self.wrap_msg(message, color, bold, underline)
         message = message.replace('$B', '\002')
-        message = message.replace('$U', '\003')
+        message = message.replace('$C', '\003')
+        message = message.replace('$U', '\037')
         irc.IRCClient.msg(self, user, message)
 
-    def notice(self, user, message):
+    def notice(self, user, message, color = False, bold = False, underline = False):
+        message = self.wrap_msg(color, bold, underline)
         message = message.replace('$B', '\002')
-        message = message.replace('$U', '\003')
+        message = message.replace('$C', '\003')
+        message = message.replace('$U', '\037')
         irc.IRCClient.notice(self, user, message)
 
+    def tick(self):
+        self.manager.tick()
 
 
 class GameBotFactory(protocol.ClientFactory):
     protocol = GameBot
 
-    def __init__(self, channel, nickname = None, nickpass = None):
+    def __init__(self, channel, nickname = None, nickpass = None, db_dir = None):
         self.channel = channel
         self.nickname = nickname
         self.nickpass = nickpass
+        self.db_dir = db_dir
+        self.bots = []
 
     def clientConnectionLost(self, connector, reason):
         connector.connect()
@@ -98,10 +117,16 @@ class GameBotFactory(protocol.ClientFactory):
         print "connection failed:", reason
         reactor.stop()
 
+    def tick(self):
+        for bot in self.bots:
+            bot.tick()
+
 
 
 if __name__ == '__main__':
-    f = GameBotFactory(sys.argv[1])
+    f = GameBotFactory(sys.argv[1], db_dir = 'db')
     reactor.connectTCP("irc.dejatoons.net", 6667, f)
+    l = task.LoopingCall(f.tick)
+    l.start(1.0)
     reactor.run()
 

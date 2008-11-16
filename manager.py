@@ -3,14 +3,20 @@ import util
 
 class Manager(util.MiniBot):
 
-    def __init__(self, bot):
+    def __init__(self, bot, db_dir):
         super(Manager, self).__init__(bot)
         self.registry = {}
         self.game = None
+        self.db_dir = db_dir
         
     def add_game(self, name, module, symbol):
         module = __import__(module)
-        self.registry[name] = (module, symbol)
+        try:
+            module.setup(self.db_dir)
+            self.registry[name] = (module, symbol)
+        except:
+            self.broadcast('Failed to load %s' % name)
+            raise
 
     def abort(self):
         if self.game:
@@ -20,7 +26,13 @@ class Manager(util.MiniBot):
     def reload(self):
         self.abort()
         for name, (module, symbol) in self.registry.iteritems():
-            self.registry[name] = (reload(module), symbol)
+            try:
+                module = reload(module)
+                module.setup(self.db_dir)
+                self.registry[name] = (module, symbol)
+            except:
+                self.broadcast('Failed to reload %s' % name)
+                raise
 
     def privmsg_rest(self, info, message):
         if self.game:
@@ -70,9 +82,11 @@ class Manager(util.MiniBot):
         """
         if command is None:
             general = [x[8:] for x in dir(self) if x.startswith('command_')]
+            general.sort()
             info.respond('$B$UGeneral commands:$U %s$B' % ', '.join(general))
             if self.game:
                 game = [x[8:] for x in dir(self.game) if x.startswith('command_')]
+                game.sort()
                 info.respond('$B$U%s commands:$U %s$B' % (self.game.name, ', '.join(game)))
             return
         
@@ -98,10 +112,6 @@ class Manager(util.MiniBot):
                 answer.append('No documentation for %s' % command)
         map(info.respond, answer)
 
-#         if info.private:
-#             for line in answer:
-#                 self.notice(info.user, line)
-#         else:
-#             map(self.broadcast, answer)
-
-
+    def tick(self):
+        if self.game:
+            self.game.tick()

@@ -56,10 +56,18 @@ typeerror_regexp = re.compile('.*takes exactly ([0-9]*) arguments? \\(([0-9]*) g
 class Stateful(object):
     def __new__(cls, *args, **kwargs):
         rval = object.__new__(cls)
-        rval.switch(cls)
+        rval.switch(cls, False, False)
         return rval
-    def switch(self, state):
+    def on_switch_in(self):
+        pass
+    def on_switch_out(self):
+        pass
+    def switch(self, state, switch_in = True, switch_out = True):
+        if switch_out:
+            self.on_switch_out()
         self.__class__ = state
+        if switch_in:
+            self.on_switch_in()
     def get_state(self):
         return self.__class__
 
@@ -69,14 +77,14 @@ class MiniBot(Stateful):
     def __init__(self, bot):
         self.bot = bot
 
-    def broadcast(self, message):
-        self.bot.broadcast(message)
+    def broadcast(self, message, color = False, bold = False, underline = False):
+        self.bot.broadcast(message, color, bold, underline)
 
-    def msg(self, user, message):
-        self.bot.msg(user, message)
+    def msg(self, user, message, color = False, bold = False, underline = False):
+        self.bot.msg(user, message, color, bold, underline)
 
-    def notice(self, user, message):
-        self.bot.notice(user, message)
+    def notice(self, user, message, color = False, bold = False, underline = False):
+        self.bot.notice(user, message, color, bold, underline)
 
     def do_command(self, info, command, args):
         fn = getattr(self, command, None)
@@ -89,14 +97,12 @@ class MiniBot(Stateful):
                     fn(info, *args)
                 except UsageError, e:
                     info.respond(e.message)
-                    #self.notice(info.user, e.message)
                 except TypeError, e:
                     if typeerror_regexp.match(e.message):
                         for x in fn.__doc__.split('\n'):
                             x = x.strip()
                             if x:
                                 info.respond(x)
-                                #self.notice(info.user, x)
                                 break
                     else:
                         raise
