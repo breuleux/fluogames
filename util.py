@@ -3,6 +3,15 @@ import inspect
 import re
 
 
+def wrap_msg(message, color = False, bold = False, underline = False):
+    if bold:
+        message = '$B%s$B' % message
+    if underline:
+        message = '$U%s$U' % message
+    if color is not False:
+        message = '$C$B$B$i%s$C' % (color, message)
+    return message
+
 def parse(message):
     message = message.split()
     def convert(s):

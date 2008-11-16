@@ -37,60 +37,19 @@ class GameBot(irc.IRCClient):
 
     def privmsg(self, user, channel, msg):
         self.manager.privmsg(util.Info(self, user, channel), msg)
-            
 
-    
-#     def privmsg(self, user, channel, msg):
-#         print user, channel, msg
-#         try:
-#             user, host = user.split('!', 1)
-#         except ValueError:
-#             return
-#         if channel == self.factory.channel:
-#             if msg == '!reload':
-#                 game = self.game
-#                 if game:
-#                     self.game = None
-#                     game.abort(user, host)
-#                 self.factory.make_registry()
-#                 self.broadcast('reloaded by %s' % user)
-#             elif msg == '!abort':
-#                 game = self.game
-#                 if game:
-#                     self.game = None
-#                     game.abort(user, host)
-#                 self.broadcast('stopped by %s' % user)
-#             elif self.game:
-#                 self.game.privmsg(user, host, channel, msg)
-#             elif msg and msg[0] == '!':
-#                 msg = msg.split()
-#                 name = msg[0][1:]
-#                 self.game = self.factory.registry[name](self, name, channel, msg[1:])
-#                 self.game.start(user, host)
-#         elif self.game:
-#             self.game.privmsg(user, host, channel, msg)
-
-    def wrap_msg(self, message, color = False, bold = False, underline = False):
-        if bold:
-            message = '$B%s$B' % message
-        if underline:
-            message = '$U%s$U' % message
-        if color is not False:
-            message = '$C$B$B$i%s$C' % (color, message)
-        return message
-        
     def broadcast(self, message, color = False, bold = False, underline = False):
         self.msg(self.factory.channel, message, color, bold, underline)
 
     def msg(self, user, message, color = False, bold = False, underline = False):
-        message = self.wrap_msg(message, color, bold, underline)
+        message = util.wrap_msg(message, color, bold, underline)
         message = message.replace('$B', '\002')
         message = message.replace('$C', '\003')
         message = message.replace('$U', '\037')
         irc.IRCClient.msg(self, user, message)
 
     def notice(self, user, message, color = False, bold = False, underline = False):
-        message = self.wrap_msg(color, bold, underline)
+        message = util.wrap_msg(message, color, bold, underline)
         message = message.replace('$B', '\002')
         message = message.replace('$C', '\003')
         message = message.replace('$U', '\037')

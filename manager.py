@@ -88,6 +88,10 @@ class Manager(util.MiniBot):
                 game = [x[8:] for x in dir(self.game) if x.startswith('command_')]
                 game.sort()
                 info.respond('$B$U%s commands:$U %s$B' % (self.game.name, ', '.join(game)))
+            else:
+                games = [name for name in self.registry]
+                games.sort()
+                info.respond('$B$UGames:$U %s$B' % ', '.join(games))
             return
         
         answer = []
@@ -95,6 +99,8 @@ class Manager(util.MiniBot):
         fn = getattr(self, cname, None)
         if not fn and self.game:
             fn = getattr(self.game, cname, None)
+        if not fn and command in self.registry:
+            fn = self.registry[command][0]
         if not fn:
             answer.append('Unknown command: %s' % command)
         else:
