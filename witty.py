@@ -18,14 +18,17 @@ import random
 from collections import defaultdict
 
 
-witty_db = []
-db_dir = ""
+# witty_db = []
+# db_dir = ""
 
-def setup(_db_dir):
-    global db_dir
-    global witty_db
-    db_dir = _db_dir
-    witty_db = map(str.strip, open(os.path.join(db_dir, 'witty', 'prompts.txt')).readlines())
+prompt_source = None
+
+def setup(db_dir):
+    global prompt_source
+    prompt_source = MultiPrompt(
+        (0.5, FromFilePrompt(os.path.join(db_dir, 'witty', 'prompts.txt')), 'text'),
+        (0.5, IRCQuotePrompt(os.path.join(db_dir, 'witty', 'ircquote.txt')), 'ircquote'),
+        )
 
 
 class Witty(game.Game):
@@ -53,7 +56,7 @@ class Witty(game.Game):
         if self.pts:
             lead = self.pts[0][0]
             if lead >= 20 or self.strikes >= self.max_strikes:
-                winners = [user for (p, user) in pts if p == lead]
+                winners = [user for (p, user) in self.pts if p == lead]
                 if len(winners) == 1:
                     self.broadcast('Winner: %s' % winners[0], bold = True)
                 else:
@@ -64,19 +67,19 @@ class Witty(game.Game):
             self.schedule(self.wait_times, Submit)
             self.broadcast('Next witty round in %i seconds!' % self.remaining(), bold = True)
 
-    def command_add_prompt(self, info, *prompt):
+    def command_add_prompt(self, info, category, *prompt):
         """
-        Usage: $Badd_prompt <prompt>$B
+        Usage: $Badd_prompt <category> <prompt>$B
 
         Add a prompt to Witty.
         """
         if not prompt:
             raise util.UsageError()
         prompt = ' '.join(map(str, prompt))
-        witty_db.append(prompt)
+        prompt_source.add_prompt(category, prompt)
         info.respond('Added prompt: %s' % prompt)
 
-    def command_delete_prompt(self, info, *prompt):
+    def command_delete_prompt(self, info, category, *prompt):
         """
         Usage: $Bdelete_prompt <prompt>$B
 
@@ -85,11 +88,8 @@ class Witty(game.Game):
         if not prompt:
             raise util.UsageError()
         prompt = ' '.join(map(str, prompt))
-        try:
-            witty_db.remove(prompt)
-        except:
-            info.respond('Could not find prompt: %s' % prompt)
-        info.respond('Added prompt: %s' % prompt)
+        prompt_source.delete_prompt(category, prompt)
+        info.respond('Deleted prompt: %s' % prompt)
 
     def command_save(self, info):
         """
@@ -97,10 +97,7 @@ class Witty(game.Game):
 
         Saves all prompts to the current database's prompts.
         """
-        f = open(os.path.join(db_dir, 'witty', 'prompts.txt'), 'w')
-        f.write('\n'.join(witty_db))
-        f.write('\n')
-        f.close()
+        prompt_source.save()
         info.respond('Successfully saved the prompts.')
     
     def start(self, info):
@@ -126,7 +123,7 @@ class Submit(Witty):
     def on_switch_in(self):
         self.submittals = {}
         self.n = 0
-        self.prompt = random.choice(witty_db)
+        self.prompt = prompt_source.generate(self) #random.choice(witty_db)
         self.broadcast('$BPrompt:$B %s' % self.prompt)
         self.schedule(self.submit_times, Vote)
         self.broadcast('$BYou have %i seconds to submit.$B' % self.remaining())
@@ -239,4 +236,89 @@ class Vote(Witty):
                 info.respond('You voted for entry #%i' % n)
         else:
             info.respond('You must play to vote.')
+
+
+
+
+###################
+
+class PromptSource(object):
+    def generate(self, game):
+        raise NotImplementedError
+    def add_prompt(self, prompt):
+        raise NotImplementedError
+    def delete_prompt(self, prompt):
+        raise NotImplementedError
+    def save(self):
+        raise NotImplementedError
+    def reload(self):
+        raise NotImplementedError
+
+class MultiPrompt(PromptSource):
+    def __init__(self, *subsources):
+        self.subsources = []
+        self.quick_find = {}
+        sp = 0
+        for p, ss, name in subsources[:-1]:
+            sp += p
+            self.subsources.append((sp, ss, name))
+            self.quick_find[name] = ss
+        p, ss, name = subsources[-1]
+        if not p:
+            assert sp < 1.0
+        else:
+            assert sp + p == 1.0
+        self.subsources.append((1.0, ss, name))
+        self.quick_find[name] = ss
+    def generate(self, game):
+        r = random.random()
+        for p, ss, name in self.subsources:
+            if r < p:
+                return ss.generate(game)
+        raise Exception('how the fuck did we get here?', r, self.subsources)
+    def add_prompt(self, name, prompt):
+        try:
+            self.quick_find[name].add_prompt(prompt)
+        except KeyError:
+            raise util.UsageError('Unknown category: %s. Accepted categories are: %s' % (name, ', '.join(self.quick_find.keys())))
+    def delete_prompt(self, name, prompt):
+        try:
+            self.quick_find[name].delete_prompt(prompt)
+        except KeyError:
+            raise util.UsageError('Unknown category: %s. Accepted categories are: %s' % (name, ', '.join(self.quick_find.keys())))
+    def save(self):
+        for p, ss, name in self.subsources:
+            ss.save()
+    def reload(self):
+        for p, ss, name in self.subsources:
+            ss.reload()
+
+class FromFilePrompt(PromptSource):
+    def __init__(self, file):
+        self.file = file
+        self.load()
+    def generate(self, game):
+        return random.choice(self.db)
+    def add_prompt(self, prompt):
+        self.db.append(prompt)
+    def delete_prompt(self, prompt):
+        try:
+            self.db.remove(prompt)
+        except:
+            raise util.UsageError('Could not find prompt: %s' % prompt)
+    def load(self):
+        self.db = map(str.strip, open(self.file).readlines())
+    def save(self):
+        f = open(self.file, 'w')
+        f.write('\n'.join(self.db))
+        f.write('\n')
+        f.close()
+    def reload(self):
+        self.save()
+        self.load()
+
+class IRCQuotePrompt(FromFilePrompt):
+    def generate(self, game):
+        q = random.choice(self.db)
+        return 'What is the context? %s' % q
 

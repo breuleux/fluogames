@@ -57,10 +57,8 @@ def parent_function():
 
 class UsageError(Exception):
     def __init__(self, message=None):
-        if message is None:
-            message = inspect.stack()[1][0].f_locals.get('__doc__', '').split('\n')[0].strip()
         super(UsageError, self).__init__(message)
-typeerror_regexp = re.compile('.*takes exactly ([0-9]*) arguments? \\(([0-9]*) given\\)')
+typeerror_regexp = re.compile('.*takes .* ([0-9]*) arguments? \\(([0-9]*) given\\)')
 
 class Stateful(object):
     def __new__(cls, *args, **kwargs):
@@ -105,7 +103,14 @@ class MiniBot(Stateful):
                 try:
                     fn(info, *args)
                 except UsageError, e:
-                    info.respond(e.message)
+                    if not e.message:
+                        for x in fn.__doc__.split('\n'):
+                            x = x.strip()
+                            if x:
+                                info.respond(x)
+                                break
+                    else:
+                        info.respond(e.message)
                 except TypeError, e:
                     if typeerror_regexp.match(e.message):
                         for x in fn.__doc__.split('\n'):
