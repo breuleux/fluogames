@@ -1,0 +1,17 @@
+syntax: glob
+*.pyo
+*~
+\#*\#
+doc/oplist.txt
+doc/typelist.txt
+compiled/*.cpp
+cutils_ext.cpp
+html
+*.o
+pdf
+pull.sh
+*.pyc
+*.so
+*.sw?
+core.*
+*.orig
