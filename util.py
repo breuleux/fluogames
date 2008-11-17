@@ -9,7 +9,7 @@ def wrap_msg(message, color = False, bold = False, underline = False):
     if underline:
         message = '$U%s$U' % message
     if color is not False:
-        message = '$C$B$B$i%s$C' % (color, message)
+        message = '$C$B$B%i%s$C' % (color, message)
     return message
 
 def parse(message):
@@ -37,11 +37,13 @@ class Info(object):
         else:
             self.public = False
             self.private = True
-    def respond(self, message, modality = None):
+    def respond(self, message, modality = None, color = False, bold = False, underline = False):
         if modality == 'public' or modality is None and self.public:
-            self.bot.broadcast(message)
+            self.bot.broadcast(message, color, bold, underline)
         else:
-            self.bot.notice(self.user, message)
+            self.bot.notice(self.user, message, color, bold, underline)
+    def clearance(self):
+        return max(self.bot.user_status.get(self.user, [0]))
 
 def require_private(f):
     f.require_private = True
@@ -50,6 +52,12 @@ def require_private(f):
 def require_public(f):
     f.require_public = True
     return f
+
+def restrict(n):
+    def deco(f):
+        f.clearance = n
+        return f
+    return deco
 
 def parent_function():
     return inspect.stack()[2]
@@ -96,9 +104,12 @@ class MiniBot(Stateful):
     def do_command(self, info, command, args):
         fn = getattr(self, command, None)
         if fn is not None:
-            if getattr(fn, 'require_private', False) and info.public \
-                    or getattr(fn, 'require_public', False) and info.private:
-                pass
+            if getattr(fn, 'require_private', False) and info.public:
+                info.respond('You must do this action in private.')
+            elif getattr(fn, 'require_public', False) and info.private:
+                info.respond('You must do this action in public.')
+            elif getattr(fn, 'clearance', False) and info.clearance() < fn.clearance:
+                info.respond('You do not have the permission to use this command.')
             else:
                 try:
                     fn(info, *args)

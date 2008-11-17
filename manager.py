@@ -37,7 +37,7 @@ class Manager(util.MiniBot):
     def privmsg_rest(self, info, message):
         if self.game:
             self.game.privmsg(info, message)
-            
+
     @util.require_public
     def command_play(self, info, name, *args):
         if self.game:
@@ -50,7 +50,7 @@ class Manager(util.MiniBot):
             self.game = getattr(module, symbol)(self, name, info.channel, args)
             self.game.start(info)
 
-    @util.require_public
+    @util.restrict(3)
     def command_abort(self, info):
         """
         Usage: $Babort$B
@@ -64,7 +64,7 @@ class Manager(util.MiniBot):
         else:
             info.respond('No game going on right now.')
 
-    @util.require_public
+    @util.restrict(3)
     def command_reload(self, info):
         """
         Usage: $Breload$B

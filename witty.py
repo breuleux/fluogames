@@ -17,18 +17,19 @@ import random
 
 from collections import defaultdict
 
-
-# witty_db = []
-# db_dir = ""
-
 prompt_source = None
 
 def setup(db_dir):
     global prompt_source
     prompt_source = MultiPrompt(
-        (0.5, FromFilePrompt(os.path.join(db_dir, 'witty', 'prompts.txt')), 'text'),
-        (0.5, IRCQuotePrompt(os.path.join(db_dir, 'witty', 'ircquote.txt')), 'ircquote'),
+        (0.34, FilePrompt(os.path.join(db_dir, 'witty', 'prompts.txt')), 'text'),
+        (0.33, DirPrompt(os.path.join(db_dir, 'witty', 'ircquote')), 'ircquote'),
+        (0.00, XVsYPrompt(os.path.join(db_dir, 'witty', 'rpsi.txt')), 'rpsi'),
+        (0.33, DirPrompt(os.path.join(db_dir, 'witty', 'parametrized')), 'parametrized'),
         )
+
+def pjoin(prompt):
+    return ' '.join(map(str, prompt))
 
 
 class Witty(game.Game):
@@ -40,7 +41,8 @@ class Witty(game.Game):
         self.seconds_per_entry_vote = 5
         self.wait_times = [5]
         self.max_strikes = 2
-        self.min_entries = 1
+        self.max_bonus = 3
+        self.min_entries = 3
 
     def schedule(self, timeouts, switch_to):
         self.timeouts = list(timeouts)
@@ -75,9 +77,9 @@ class Witty(game.Game):
         """
         if not prompt:
             raise util.UsageError()
-        prompt = ' '.join(map(str, prompt))
-        prompt_source.add_prompt(category, prompt)
-        info.respond('Added prompt: %s' % prompt)
+        #prompt = ' '.join(map(str, prompt))
+        prompt_source.add_prompt(category, *prompt)
+        info.respond('Added prompt: %s' % pjoin(prompt))
 
     def command_delete_prompt(self, info, category, *prompt):
         """
@@ -87,9 +89,9 @@ class Witty(game.Game):
         """
         if not prompt:
             raise util.UsageError()
-        prompt = ' '.join(map(str, prompt))
-        prompt_source.delete_prompt(category, prompt)
-        info.respond('Deleted prompt: %s' % prompt)
+        #prompt = ' '.join(map(str, prompt))
+        prompt_source.delete_prompt(category, *prompt)
+        info.respond('Deleted prompt: %s' % pjoin(prompt))
 
     def command_save(self, info):
         """
@@ -102,6 +104,7 @@ class Witty(game.Game):
     
     def start(self, info):
         self.strikes = 0
+        self.players = set()
         self.points = defaultdict(int)
         self.pts = []
         self.broadcast('A new game of Witty starts!', bold = True, underline = True)
@@ -134,8 +137,9 @@ class Submit(Witty):
 
         Prints out the current prompt and the time remaining
         """
-        self.broadcast('$B%i seconds to submit for:$B %s' % (self.remaining(), self.prompt))
-        
+        info.respond('$B%i seconds to submit for:$B %s' % (self.remaining(), self.prompt))
+
+    @util.restrict(1)
     def command_next(self, info):
         """
         Usage: $Bnext$B
@@ -144,7 +148,8 @@ class Submit(Witty):
         """
         self.broadcast('Okay, okay... next one!')
         self.on_switch_in()
-    
+
+    @util.require_private
     def command_submit(self, info, *message):
         """
         Usage: $Bsubmit <entry>$B
@@ -156,8 +161,10 @@ class Submit(Witty):
         message = ' '.join(map(str, message))
         if info.user in self.submittals:
             self.submittals[info.user][1] = message
+            info.respond('You have reviewed your entry.')
         else:
             self.n += 1
+            self.players.add(info.user)
             self.submittals[info.user] = [self.n, message]
             self.broadcast('$B[$B$C4$B$B%i$C$B] was submitted!$B' % self.n)
 
@@ -184,6 +191,7 @@ class Vote(Witty):
 
     def on_switch_out(self):
         votes = self.votes.items()
+        self.tally = []
         for (i, entry), user in self.entries:
             msg = '$B[$B$C4$B$B%i$C$B]$B $C12$B$B%s$C | $B%s$B | ' % (i, entry, user)
             v = [user2 for user2, vote in votes if vote == i]
@@ -201,7 +209,16 @@ class Vote(Witty):
                 self.broadcast('$B%s$B did not vote... no point for him or her!' % user)
             else:
                 if nv:
+                    self.tally.append([nv, user])
                     self.points[user] += nv
+        self.tally.sort(key = lambda (x, y): (-x, y))
+        if len(self.tally) >= 2 and self.tally[0][0] > self.tally[1][0]:
+            user = self.tally[0][1]
+            bonus = self.tally[0][0] - self.tally[1][0]
+            bonus = min(bonus, self.max_bonus)
+            self.tally[0][0] += bonus
+            self.broadcast('$B%s$B gets a bonus of %i points for first place!' % (user, bonus))
+            self.points[user] += bonus
         pts = [(y, x) for (x, y) in self.points.items()]
         pts.sort(key = lambda (x, y): (-x, y))
         if pts:
@@ -214,7 +231,7 @@ class Vote(Witty):
 
         Prints out how much time left there is to vote.
         """
-        self.broadcast('%i seconds remaining to vote.' % self.remaining(), bold = True)
+        info.respond('%i seconds remaining to vote.' % self.remaining(), bold = True)
 
     def command_vote(self, info, n):
         """
@@ -245,9 +262,9 @@ class Vote(Witty):
 class PromptSource(object):
     def generate(self, game):
         raise NotImplementedError
-    def add_prompt(self, prompt):
+    def add_prompt(self, *prompt):
         raise NotImplementedError
-    def delete_prompt(self, prompt):
+    def delete_prompt(self, *prompt):
         raise NotImplementedError
     def save(self):
         raise NotImplementedError
@@ -276,16 +293,22 @@ class MultiPrompt(PromptSource):
             if r < p:
                 return ss.generate(game)
         raise Exception('how the fuck did we get here?', r, self.subsources)
-    def add_prompt(self, name, prompt):
+    def add_prompt(self, category, *prompt):
+        if not prompt:
+            raise util.UsageError('Not enough arguments to add_prompt')
         try:
-            self.quick_find[name].add_prompt(prompt)
+            self.quick_find[category].add_prompt(*prompt)
         except KeyError:
-            raise util.UsageError('Unknown category: %s. Accepted categories are: %s' % (name, ', '.join(self.quick_find.keys())))
-    def delete_prompt(self, name, prompt):
+            raise util.UsageError('Unknown category: %s. Accepted categories are: %s'
+                                  % (category, ', '.join(self.quick_find.keys())))
+    def delete_prompt(self, category, *prompt):
+        if not prompt:
+            raise util.UsageError('Not enough arguments to add_prompt')
         try:
-            self.quick_find[name].delete_prompt(prompt)
+            self.quick_find[category].delete_prompt(*prompt)
         except KeyError:
-            raise util.UsageError('Unknown category: %s. Accepted categories are: %s' % (name, ', '.join(self.quick_find.keys())))
+            raise util.UsageError('Unknown category: %s. Accepted categories are: %s'
+                                  % (category, ', '.join(self.quick_find.keys())))
     def save(self):
         for p, ss, name in self.subsources:
             ss.save()
@@ -293,15 +316,21 @@ class MultiPrompt(PromptSource):
         for p, ss, name in self.subsources:
             ss.reload()
 
-class FromFilePrompt(PromptSource):
+class FilePrompt(PromptSource):
     def __init__(self, file):
         self.file = file
         self.load()
     def generate(self, game):
         return random.choice(self.db)
-    def add_prompt(self, prompt):
+    def add_prompt(self, *prompt):
+        if not prompt:
+            raise util.UsageError('Not enough arguments to add_prompt')
+        prompt = pjoin(prompt)
         self.db.append(prompt)
-    def delete_prompt(self, prompt):
+    def delete_prompt(self, *prompt):
+        if not prompt:
+            raise util.UsageError('Not enough arguments to add_prompt')
+        prompt = pjoin(prompt)
         try:
             self.db.remove(prompt)
         except:
@@ -317,8 +346,61 @@ class FromFilePrompt(PromptSource):
         self.save()
         self.load()
 
-class IRCQuotePrompt(FromFilePrompt):
+class DirPrompt(PromptSource):
+    def __init__(self, dir):
+        files = os.listdir(dir)
+        if 'main.txt' not in files:
+            raise Exception('There must be a file named main.txt in %s' % dir)
+        self.dir = dir
+        files = [file for file in files if file.endswith('.txt')]
+        self.files = files
+        self.db = {}
+        self.load()
     def generate(self, game):
-        q = random.choice(self.db)
-        return 'What is the context? %s' % q
+        d = {}
+        for k, v in self.db.iteritems():
+            d[k] = random.choice(v)
+        players = list(game.players)
+        if not players: players = ['someone']
+        d['user'] = random.choice(players)
+        main = d.pop('main')
+        main %= d
+        return main
+    def add_prompt(self, file, *prompt):
+        if not prompt:
+            raise util.UsageError('Not enough arguments to add_prompt')
+        prompt = pjoin(prompt)
+        if file not in self.db:
+            raise util.UsageError('Must add a prompt to one of these files: %s' % ', '.join(self.db.keys()))
+        self.db[file].append(prompt)
+    def delete_prompt(self, file, *prompt):
+        if not prompt:
+            raise util.UsageError('Not enough arguments to add_prompt')
+        prompt = pjoin(prompt)
+        if file not in self.db:
+            raise util.UsageError('Must delete a prompt from one of these files: %s' % ', '.join(self.db.keys()))
+        try:
+            self.db.remove(prompt)
+        except:
+            raise util.UsageError('Could not find prompt: %s' % prompt)
+    def load(self):
+        for file in self.files:
+            self.db[file[:-4]] = map(str.strip, open(os.path.join(self.dir, file)).readlines())
+    def save(self):
+        for file in self.files:
+            f = open(os.path.join(self.dir, file), 'w')
+            f.write('\n'.join(self.db[file[:-4]]))
+            f.write('\n')
+            f.close()
+    def reload(self):
+        self.save()
+        self.load()
+
+class XVsYPrompt(FilePrompt):
+    def generate(self, game):
+        a, b = None, None
+        while a == b:
+            a = super(XVsYPrompt, self).generate(game)
+            b = super(XVsYPrompt, self).generate(game)
+        return '$C4$BFIGHT!$B$C $B%s$B vs. $B%s$B' % (a, b)
 
