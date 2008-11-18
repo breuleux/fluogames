@@ -3,6 +3,8 @@ import util
 
 class Game(util.MiniBot):
 
+    catch_all_private = False
+    
     def __init__(self, manager, name, channel, arguments):
         super(Game, self).__init__(manager.bot)
         self.manager = manager

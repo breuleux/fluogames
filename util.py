@@ -3,13 +3,15 @@ import inspect
 import re
 
 
-def wrap_msg(message, color = False, bold = False, underline = False):
+def format(message, bold = False, underline = False, fg = False, bg = False, color = False):
+    color = ','.join([str(fg) if fg is not False else '',
+                      str(bg) if bg is not False else ''])
     if bold:
         message = '$B%s$B' % message
     if underline:
         message = '$U%s$U' % message
-    if color is not False:
-        message = '$C$B$B%i%s$C' % (color, message)
+    if color != ',':
+        message = '$C%s$X%s$C' % (color, message)
     return message
 
 def parse(message):
@@ -37,11 +39,11 @@ class Info(object):
         else:
             self.public = False
             self.private = True
-    def respond(self, message, modality = None, color = False, bold = False, underline = False):
+    def respond(self, message, modality = None, bold = False, underline = False, fg = False, bg = False):
         if modality == 'public' or modality is None and self.public:
-            self.bot.broadcast(message, color, bold, underline)
+            self.bot.broadcast(message, bold, underline, fg, bg)
         else:
-            self.bot.notice(self.user, message, color, bold, underline)
+            self.bot.notice(self.user, message, bold, underline, fg, bg)
     def clearance(self):
         return max(self.bot.user_status.get(self.user, [0]))
 
@@ -92,17 +94,24 @@ class MiniBot(Stateful):
     def __init__(self, bot):
         self.bot = bot
 
-    def broadcast(self, message, color = False, bold = False, underline = False):
-        self.bot.broadcast(message, color, bold, underline)
+    def broadcast(self, message, bold = False, underline = False, fg = False, bg = False):
+        self.bot.broadcast(message, bold, underline, fg, bg)
 
-    def msg(self, user, message, color = False, bold = False, underline = False):
-        self.bot.msg(user, message, color, bold, underline)
+    def msg(self, user, message, bold = False, underline = False, fg = False, bg = False):
+        self.bot.msg(user, message, bold, underline, fg, bg)
 
-    def notice(self, user, message, color = False, bold = False, underline = False):
-        self.bot.notice(user, message, color, bold, underline)
+    def notice(self, user, message, bold = False, underline = False, fg = False, bg = False):
+        self.bot.notice(user, message, bold, underline, fg, bg)
+
+    def get_commands(self):
+        return [x[8:] for x in dir(self) if x.startswith('command_')]
+
+    def get_command(self, command):
+        fn = getattr(self, 'command_' + command, None)
+        return fn
 
     def do_command(self, info, command, args):
-        fn = getattr(self, command, None)
+        fn = self.get_command(command)
         if fn is not None:
             if getattr(fn, 'require_private', False) and info.public:
                 info.respond('You must do this action in private.')
@@ -141,12 +150,12 @@ class MiniBot(Stateful):
         orig = message
         if info.public and message.startswith('!'):
             message = parse(message)
-            command, args = 'command_%s' % message[0][1:], message[1:]
+            command, args = message[0][1:], message[1:]
             if self.do_command(info, command, args):
                 return
         elif info.private:
             message = parse(message)
-            command, args = 'command_%s' % message[0], message[1:]
+            command, args = message[0], message[1:]
             if self.do_command(info, command, args):
                 return
         self.privmsg_rest(info, orig)

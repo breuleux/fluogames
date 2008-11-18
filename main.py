@@ -71,21 +71,23 @@ class GameBot(irc.IRCClient):
     def privmsg(self, user, channel, msg):
         self.manager.privmsg(util.Info(self, user, channel), msg)
 
-    def broadcast(self, message, color = False, bold = False, underline = False):
-        self.msg(self.factory.channel, message, color, bold, underline)
+    def broadcast(self, message, bold = False, underline = False, fg = False, bg = False):
+        self.msg(self.factory.channel, message, bold, underline, fg, bg)
 
-    def msg(self, user, message, color = False, bold = False, underline = False):
-        message = util.wrap_msg(message, color, bold, underline)
+    def msg(self, user, message, bold = False, underline = False, fg = False, bg = False):
+        message = util.format(message, bold, underline, fg, bg)
         message = message.replace('$B', '\002')
         message = message.replace('$C', '\003')
         message = message.replace('$U', '\037')
+        message = message.replace('$X', '\002\002')
         irc.IRCClient.msg(self, user, message)
 
-    def notice(self, user, message, color = False, bold = False, underline = False):
-        message = util.wrap_msg(message, color, bold, underline)
+    def notice(self, user, message, bold = False, underline = False, fg = False, bg = False):
+        message = util.format(message, bold, underline, fg, bg)
         message = message.replace('$B', '\002')
         message = message.replace('$C', '\003')
         message = message.replace('$U', '\037')
+        message = message.replace('$X', '\002\002')
         irc.IRCClient.notice(self, user, message)
 
     def tick(self):
