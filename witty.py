@@ -34,6 +34,8 @@ def pjoin(prompt):
 
 class Witty(game.Game):
 
+    catch_all_private = True
+    
     def __init__(self, manager, name, channel, arguments):
         super(Witty, self).__init__(manager, name, channel, arguments)
         self.submit_times = [30, 20, 10]
@@ -43,6 +45,24 @@ class Witty(game.Game):
         self.max_strikes = 2
         self.max_bonus = 3
         self.min_entries = 3
+        self.color = dict(fg = 0, bg = 1)
+        self.color_prompt_prefix = dict(fg = 4, bg = self.color['bg'])
+        self.color_prompt = dict(fg = 8, bg = self.color['bg'])
+        self.color_entrynum = dict(fg = 4, bg = self.color['bg'])
+        self.color_entry = dict(fg = 9, bg = self.color['bg'])
+        self.color_entry_vote = dict(fg = 11, bg = self.color['bg'])
+    
+    def start(self, info):
+        if self.arguments:
+            self.do_command(info, self.arguments[0], self.arguments[1:])
+            self.manager.abort()
+            return
+        self.strikes = 0
+        self.players = set()
+        self.points = defaultdict(int)
+        self.pts = []
+        self.broadcast('A new game of Witty starts!', bold = True, underline = True)
+        self.switch(Submit)
 
     def schedule(self, timeouts, switch_to):
         self.timeouts = list(timeouts)
@@ -77,8 +97,8 @@ class Witty(game.Game):
         """
         if not prompt:
             raise util.UsageError()
-        #prompt = ' '.join(map(str, prompt))
         prompt_source.add_prompt(category, *prompt)
+        prompt_source.save()
         info.respond('Added prompt: %s' % pjoin(prompt))
 
     def command_delete_prompt(self, info, category, *prompt):
@@ -89,8 +109,8 @@ class Witty(game.Game):
         """
         if not prompt:
             raise util.UsageError()
-        #prompt = ' '.join(map(str, prompt))
         prompt_source.delete_prompt(category, *prompt)
+        prompt_source.save()
         info.respond('Deleted prompt: %s' % pjoin(prompt))
 
     def command_save(self, info):
@@ -102,15 +122,14 @@ class Witty(game.Game):
         prompt_source.save()
         info.respond('Successfully saved the prompts.')
     
-    def start(self, info):
-        self.strikes = 0
-        self.players = set()
-        self.points = defaultdict(int)
-        self.pts = []
-        self.broadcast('A new game of Witty starts!', bold = True, underline = True)
-        self.switch(Submit)
+    def broadcast(self, message, bold = False, underline = False):
+        super(Witty, self).broadcast(message, bold, underline, **self.color)
 
+    def tick_side(self):
+        pass
+        
     def tick(self):
+        self.tick_side()
         self.timeouts[0] -= 1
         if self.timeouts[0] == 0:
             self.timeouts[:1] = []
@@ -127,7 +146,9 @@ class Submit(Witty):
         self.submittals = {}
         self.n = 0
         self.prompt = prompt_source.generate(self) #random.choice(witty_db)
-        self.broadcast('$BPrompt:$B %s' % self.prompt)
+        self.broadcast('%s%s' % (
+                util.format('Prompt: ', bold = True, **self.color_prompt_prefix),
+                util.format(self.prompt, **self.color_prompt)))
         self.schedule(self.submit_times, Vote)
         self.broadcast('$BYou have %i seconds to submit.$B' % self.remaining())
 
@@ -140,6 +161,7 @@ class Submit(Witty):
         info.respond('$B%i seconds to submit for:$B %s' % (self.remaining(), self.prompt))
 
     @util.restrict(1)
+    @util.require_public
     def command_next(self, info):
         """
         Usage: $Bnext$B
@@ -161,13 +183,20 @@ class Submit(Witty):
         message = ' '.join(map(str, message))
         if info.user in self.submittals:
             self.submittals[info.user][1] = message
-            info.respond('You have reviewed your entry.')
+            info.respond('You have reviewed your entry: %s' % message)
         else:
             self.n += 1
             self.players.add(info.user)
             self.submittals[info.user] = [self.n, message]
-            self.broadcast('$B[$B$C4$B$B%i$C$B] was submitted!$B' % self.n)
+            self.broadcast('%s%s%s' % (
+                    util.format('[', bold = True, **self.color),
+                    util.format(str(self.n), bold = True, **self.color_entrynum),
+                    util.format('$B]$B was submitted!', **self.color)))
 
+    def privmsg_rest(self, info, message):
+        if info.private:
+            self.do_command(info, 'submit', (message, ))
+            
 
 class Vote(Witty):
 
@@ -182,9 +211,17 @@ class Vote(Witty):
         self.entries.sort()
         self.votes = {}
         self.broadcast('Time out! Here are the entries:', bold = True)
-        self.broadcast('$BPrompt:$B %s' % self.prompt)
+        self.broadcast('%s%s' % (
+                util.format('Prompt: ', bold = True, **self.color_prompt_prefix),
+                util.format(self.prompt, **self.color_prompt)))
         for (i, entry), user in self.entries:
-            self.broadcast('$B[$B$C4$B$B%i$C$B]$B $C12$B$B%s' % (i, entry))
+            self.broadcast('%(leftbrack)s%(num)s%(rightbrack)s%(entry)s' % dict(
+                    leftbrack = util.format('[', bold = True, **self.color),
+                    num = util.format(str(i), bold = True, **self.color_entrynum),
+                    rightbrack = util.format('] ', bold = True, **self.color),
+                    entry = util.format(entry, **self.color_entry)
+                    ))
+                    
         total = self.min_vote_time + self.seconds_per_entry_vote * len(self.entries)
         self.schedule([total - total/2, total/2], Witty)
         self.broadcast('You have %i seconds to vote.' % self.remaining(), bold = True)
@@ -192,19 +229,38 @@ class Vote(Witty):
     def on_switch_out(self):
         votes = self.votes.items()
         self.tally = []
-        for (i, entry), user in self.entries:
-            msg = '$B[$B$C4$B$B%i$C$B]$B $C12$B$B%s$C | $B%s$B | ' % (i, entry, user)
-            v = [user2 for user2, vote in votes if vote == i]
+        padding = max(len(user) for (_, user) in self.entries) + 1
+        _v = [[user2 for user2, vote in votes if vote == i] for ((i, entry), user) in self.entries]
+        padding_v = max(len(str(len(v))) for v in _v) + 2
+        self.broadcast('%s%s' % (
+                util.format('Prompt: ', bold = True, **self.color_prompt_prefix),
+                util.format(self.prompt, **self.color_prompt)))
+        for ((i, entry), user), v in zip(self.entries, _v):
             nv = len(v)
+            if nv == 0: p = ''
+            elif user not in self.votes: p = ''
+            else: p = '+%i' % nv
+#             if nv == 0:
+#                 msg = 'No votes.'
+#             else:
+#                 if nv == 1:
+#                     msg = '1 vote '
+#                 else:
+#                     msg = '%i votes ' % nv
+#                 msg += '(%s)' % (', '.join(v))
             if nv == 0:
-                msg += 'No votes.'
+                msg = 'No votes.'
             else:
-                if nv == 1:
-                    msg += '1 vote '
-                else:
-                    msg += '%i votes ' % nv
-                msg += '(%s)' % (', '.join(v))
-            self.broadcast(msg)
+                msg = 'Votes: %s' % (', '.join(v))
+            self.broadcast('%(leftbrack)s%(num)s%(rightbrack)s%(user)s%(points)s%(entry)s%(votes)s' % dict(
+                leftbrack = util.format('[', bold = True, **self.color),
+                num = util.format(str(i), bold = True, **self.color_entrynum),
+                rightbrack = util.format('] ', bold = True, **self.color),
+                user = util.format(user.ljust(padding), bold = True, **self.color),
+                points = util.format(p.ljust(padding_v), bold = True, **self.color),
+                entry = util.format(entry, **self.color_entry_vote),
+                votes = util.format(' | ' + msg, **self.color)
+                ))
             if user not in self.votes:
                 self.broadcast('$B%s$B did not vote... no point for him or her!' % user)
             else:
@@ -253,6 +309,13 @@ class Vote(Witty):
                 info.respond('You voted for entry #%i' % n)
         else:
             info.respond('You must play to vote.')
+
+    def privmsg_rest(self, info, message):
+        if info.private:
+            try:
+                self.do_command(info, 'vote', int(message))
+            except ValueError:
+                pass
 
 
 
@@ -320,6 +383,7 @@ class FilePrompt(PromptSource):
     def __init__(self, file):
         self.file = file
         self.load()
+        self.changed = False
     def generate(self, game):
         return random.choice(self.db)
     def add_prompt(self, *prompt):
@@ -327,21 +391,25 @@ class FilePrompt(PromptSource):
             raise util.UsageError('Not enough arguments to add_prompt')
         prompt = pjoin(prompt)
         self.db.append(prompt)
+        self.changed = True
     def delete_prompt(self, *prompt):
         if not prompt:
             raise util.UsageError('Not enough arguments to add_prompt')
         prompt = pjoin(prompt)
         try:
             self.db.remove(prompt)
+            self.changed = True
         except:
             raise util.UsageError('Could not find prompt: %s' % prompt)
     def load(self):
         self.db = map(str.strip, open(self.file).readlines())
     def save(self):
-        f = open(self.file, 'w')
-        f.write('\n'.join(self.db))
-        f.write('\n')
-        f.close()
+        if self.changed:
+            f = open(self.file, 'w')
+            f.write('\n'.join(self.db))
+            f.write('\n')
+            f.close()
+        self.changed = False
     def reload(self):
         self.save()
         self.load()
@@ -356,6 +424,7 @@ class DirPrompt(PromptSource):
         self.files = files
         self.db = {}
         self.load()
+        self.changed = defaultdict(bool)
     def generate(self, game):
         d = {}
         for k, v in self.db.iteritems():
@@ -373,6 +442,7 @@ class DirPrompt(PromptSource):
         if file not in self.db:
             raise util.UsageError('Must add a prompt to one of these files: %s' % ', '.join(self.db.keys()))
         self.db[file].append(prompt)
+        self.changed[file] = True
     def delete_prompt(self, file, *prompt):
         if not prompt:
             raise util.UsageError('Not enough arguments to add_prompt')
@@ -380,7 +450,8 @@ class DirPrompt(PromptSource):
         if file not in self.db:
             raise util.UsageError('Must delete a prompt from one of these files: %s' % ', '.join(self.db.keys()))
         try:
-            self.db.remove(prompt)
+            self.db[file].remove(prompt)
+            self.changed[file] = True
         except:
             raise util.UsageError('Could not find prompt: %s' % prompt)
     def load(self):
@@ -388,10 +459,13 @@ class DirPrompt(PromptSource):
             self.db[file[:-4]] = map(str.strip, open(os.path.join(self.dir, file)).readlines())
     def save(self):
         for file in self.files:
-            f = open(os.path.join(self.dir, file), 'w')
-            f.write('\n'.join(self.db[file[:-4]]))
-            f.write('\n')
-            f.close()
+            _file = file[:-4]
+            if self.changed[_file]:
+                f = open(os.path.join(self.dir, file), 'w')
+                f.write('\n'.join(self.db[_file]))
+                f.write('\n')
+                f.close()
+            self.changed[_file] = False
     def reload(self):
         self.save()
         self.load()
