@@ -2,16 +2,7 @@ syntax: glob
 *.pyo
 *~
 \#*\#
-doc/oplist.txt
-doc/typelist.txt
-compiled/*.cpp
-cutils_ext.cpp
-html
-*.o
-pdf
-pull.sh
+db/*
 *.pyc
-*.so
-*.sw?
 core.*
 *.orig
