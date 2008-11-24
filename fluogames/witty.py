@@ -1,14 +1,3 @@
-"""
-Witty is a game where you must complete prompts in the wittiest ways
-possible :) - each round, all players must vote for the entry they
-prefer and they score points for the votes they receive.
-
-Each round is played in two phases: submit and vote. During the submit
-phase, PM the bot with $Bsubmit <entry>$B. Once the submit phase is
-over, all entries will be listed in numerical order without their
-authors' names. During the voting phase, PM the bot with $Bvote
-<entry#>$B. You will only get points if you vote!
-"""
 
 import game
 import util
@@ -22,17 +11,28 @@ prompt_source = None
 def setup(db_dir):
     global prompt_source
     prompt_source = MultiPrompt(
-        (0.34, FilePrompt(os.path.join(db_dir, 'witty', 'prompts.txt')), 'text'),
-        (0.33, DirPrompt(os.path.join(db_dir, 'witty', 'ircquote')), 'ircquote'),
+        (0.45, FilePrompt(os.path.join(db_dir, 'witty', 'prompts.txt')), 'text'),
+        (0.10, DirPrompt(os.path.join(db_dir, 'witty', 'ircquote')), 'ircquote'),
         (0.00, XVsYPrompt(os.path.join(db_dir, 'witty', 'rpsi.txt')), 'rpsi'),
-        (0.33, DirPrompt(os.path.join(db_dir, 'witty', 'parametrized')), 'parametrized'),
+        (0.45, DirPrompt(os.path.join(db_dir, 'witty', 'parametrized')), 'parametrized'),
         )
 
 def pjoin(prompt):
     return ' '.join(map(str, prompt))
 
 
-class Witty(game.Game):
+class Witty(game.PhasedGame):
+    """
+    Witty is a game where you must complete prompts in the wittiest ways
+    possible :) - each round, all players must vote for the entry they
+    prefer and they score points for the votes they receive.
+
+    Each round is played in two phases: submit and vote. During the submit
+    phase, PM the bot with $Bsubmit <entry>$B. Once the submit phase is
+    over, all entries will be listed in numerical order without their
+    authors' names. During the voting phase, PM the bot with $Bvote
+    <entry#>$B. You will only get points if you vote!
+    """
 
     catch_all_private = True
     
@@ -61,15 +61,15 @@ class Witty(game.Game):
         self.players = set()
         self.points = defaultdict(int)
         self.pts = []
-        self.broadcast('A new game of Witty starts!', bold = True, underline = True)
+        self.broadcast('A new game of Witty starts!', underline = True)
         self.switch(Submit)
 
-    def schedule(self, timeouts, switch_to):
-        self.timeouts = list(timeouts)
-        self.switch_to = switch_to
+#     def schedule(self, timeouts, switch_to):
+#         self.timeouts = list(timeouts)
+#         self.switch_to = switch_to
 
-    def remaining(self):
-        return sum(self.timeouts)
+#     def remaining(self):
+#         return sum(self.timeouts)
         
     def on_switch_in(self):
         if self.strikes >= self.max_strikes:
@@ -80,14 +80,14 @@ class Witty(game.Game):
             if lead >= 20 or self.strikes >= self.max_strikes:
                 winners = [user for (p, user) in self.pts if p == lead]
                 if len(winners) == 1:
-                    self.broadcast('Winner: %s' % winners[0], bold = True)
+                    self.broadcast('Winner: %s' % winners[0])
                 else:
-                    self.broadcast('Winners: %s' % ', '.join(winners), bold = True)
+                    self.broadcast('Winners: %s' % ', '.join(winners))
                 self.manager.abort()
                 return
         if self.manager.game is self:
             self.schedule(self.wait_times, Submit)
-            self.broadcast('Next witty round in %i seconds!' % self.remaining(), bold = True)
+            self.broadcast('Next witty round in %i seconds!' % self.remaining())
 
     def command_add_prompt(self, info, category, *prompt):
         """
@@ -125,18 +125,18 @@ class Witty(game.Game):
     def broadcast(self, message, bold = False, underline = False):
         super(Witty, self).broadcast(message, bold, underline, **self.color)
 
-    def tick_side(self):
-        pass
+#     def tick_side(self):
+#         pass
         
-    def tick(self):
-        self.tick_side()
-        self.timeouts[0] -= 1
-        if self.timeouts[0] == 0:
-            self.timeouts[:1] = []
-            if not self.timeouts:
-                self.switch(self.switch_to)
-            else:
-                self.broadcast('%i seconds remaining!' % self.remaining(), bold = True)
+#     def tick(self):
+#         self.tick_side()
+#         self.timeouts[0] -= 1
+#         if self.timeouts[0] == 0:
+#             self.timeouts[:1] = []
+#             if not self.timeouts:
+#                 self.switch(self.switch_to)
+#             else:
+#                 self.broadcast('%i seconds remaining!' % self.remaining())
 
 
 
@@ -145,12 +145,12 @@ class Submit(Witty):
     def on_switch_in(self):
         self.submittals = {}
         self.n = 0
-        self.prompt = prompt_source.generate(self) #random.choice(witty_db)
+        self.prompt = prompt_source.generate(self)
         self.broadcast('%s%s' % (
-                util.format('Prompt: ', bold = True, **self.color_prompt_prefix),
+                util.format('Prompt: ', **self.color_prompt_prefix),
                 util.format(self.prompt, **self.color_prompt)))
         self.schedule(self.submit_times, Vote)
-        self.broadcast('$BYou have %i seconds to submit.$B' % self.remaining())
+        self.broadcast('You have %i seconds to submit.' % self.remaining())
 
     def command_status(self, info):
         """
@@ -189,9 +189,9 @@ class Submit(Witty):
             self.players.add(info.user)
             self.submittals[info.user] = [self.n, message]
             self.broadcast('%s%s%s' % (
-                    util.format('[', bold = True, **self.color),
-                    util.format(str(self.n), bold = True, **self.color_entrynum),
-                    util.format('$B]$B was submitted!', **self.color)))
+                    util.format('[', **self.color),
+                    util.format(str(self.n), **self.color_entrynum),
+                    util.format('] was submitted!', **self.color)))
 
     def privmsg_rest(self, info, message):
         if info.private:
@@ -204,27 +204,27 @@ class Vote(Witty):
         self.entries = [(y, x) for (x, y) in self.submittals.items()]
         if len(self.entries) < self.min_entries:
             self.strikes += 1
-            self.broadcast('Time out! Unfortunately, we need at least %i entries to play.' % self.min_entries, bold = True)
+            self.broadcast('Time out! Unfortunately, we need at least %i entries to play.' % self.min_entries)
             self.switch(Witty, switch_out = False)
             return
         self.strikes = 0
         self.entries.sort()
         self.votes = {}
-        self.broadcast('Time out! Here are the entries:', bold = True)
+        self.broadcast('Time out! Here are the entries:')
         self.broadcast('%s%s' % (
-                util.format('Prompt: ', bold = True, **self.color_prompt_prefix),
+                util.format('Prompt: ', **self.color_prompt_prefix),
                 util.format(self.prompt, **self.color_prompt)))
         for (i, entry), user in self.entries:
             self.broadcast('%(leftbrack)s%(num)s%(rightbrack)s%(entry)s' % dict(
-                    leftbrack = util.format('[', bold = True, **self.color),
-                    num = util.format(str(i), bold = True, **self.color_entrynum),
-                    rightbrack = util.format('] ', bold = True, **self.color),
+                    leftbrack = util.format('[', **self.color),
+                    num = util.format(str(i), **self.color_entrynum),
+                    rightbrack = util.format('] ', **self.color),
                     entry = util.format(entry, **self.color_entry)
                     ))
                     
         total = self.min_vote_time + self.seconds_per_entry_vote * len(self.entries)
         self.schedule([total - total/2, total/2], Witty)
-        self.broadcast('You have %i seconds to vote.' % self.remaining(), bold = True)
+        self.broadcast('You have %i seconds to vote.' % self.remaining())
 
     def on_switch_out(self):
         votes = self.votes.items()
@@ -233,7 +233,7 @@ class Vote(Witty):
         _v = [[user2 for user2, vote in votes if vote == i] for ((i, entry), user) in self.entries]
         padding_v = max(len(str(len(v))) for v in _v) + 2
         self.broadcast('%s%s' % (
-                util.format('Prompt: ', bold = True, **self.color_prompt_prefix),
+                util.format('Prompt: ', **self.color_prompt_prefix),
                 util.format(self.prompt, **self.color_prompt)))
         for ((i, entry), user), v in zip(self.entries, _v):
             nv = len(v)
@@ -253,11 +253,11 @@ class Vote(Witty):
             else:
                 msg = 'Votes: %s' % (', '.join(v))
             self.broadcast('%(leftbrack)s%(num)s%(rightbrack)s%(user)s%(points)s%(entry)s%(votes)s' % dict(
-                leftbrack = util.format('[', bold = True, **self.color),
-                num = util.format(str(i), bold = True, **self.color_entrynum),
-                rightbrack = util.format('] ', bold = True, **self.color),
-                user = util.format(user.ljust(padding), bold = True, **self.color),
-                points = util.format(p.ljust(padding_v), bold = True, **self.color),
+                leftbrack = util.format('[', **self.color),
+                num = util.format(str(i), **self.color_entrynum),
+                rightbrack = util.format('] ', **self.color),
+                user = util.format(user.ljust(padding), **self.color),
+                points = util.format(p.ljust(padding_v), **self.color),
                 entry = util.format(entry, **self.color_entry_vote),
                 votes = util.format(' | ' + msg, **self.color)
                 ))
@@ -278,7 +278,7 @@ class Vote(Witty):
         pts = [(y, x) for (x, y) in self.points.items()]
         pts.sort(key = lambda (x, y): (-x, y))
         if pts:
-            self.broadcast('$BScore:$B ' + ', '.join('$B%s$B: %i' % (user, p) for (p, user) in pts))
+            self.broadcast('Score: ' + ', '.join('%s: %i' % (user, p) for (p, user) in pts))
         self.pts = pts
 
     def command_status(self, info):
@@ -287,7 +287,7 @@ class Vote(Witty):
 
         Prints out how much time left there is to vote.
         """
-        info.respond('%i seconds remaining to vote.' % self.remaining(), bold = True)
+        info.respond('%i seconds remaining to vote.' % self.remaining())
 
     def command_vote(self, info, n):
         """
@@ -303,7 +303,7 @@ class Vote(Witty):
                 raise util.UsageError('You can\'t vote for yourself!')
             self.votes[info.user] = n
             if len(self.votes) == len(self.entries):
-                self.broadcast('All votes are in!', bold = True)
+                self.broadcast('All votes are in!')
                 self.switch(Witty)
             else:
                 info.respond('You voted for entry #%i' % n)
@@ -313,7 +313,7 @@ class Vote(Witty):
     def privmsg_rest(self, info, message):
         if info.private:
             try:
-                self.do_command(info, 'vote', int(message))
+                self.do_command(info, 'vote', (int(message),))
             except ValueError:
                 pass
 

@@ -14,14 +14,15 @@ import util
 
 class GameBot(irc.IRCClient):
 
-    nickname = "LEGO"
-
     def connectionMade(self):
         self.factory.bots.append(self)
+        self.nickname = self.factory.nickname
         irc.IRCClient.connectionMade(self)
         if not hasattr(self, 'manager'):
             self.manager = manager.Manager(self, self.factory.db_dir)
             self.manager.add_game('witty', 'witty', 'Witty')
+            self.manager.add_game('countdown', 'misc', 'Countdown')
+            #self.manager.add_game('operator', 'operator', 'Operator')
         self.user_status = {}
 
     def connectionLost(self, reason):
@@ -35,10 +36,14 @@ class GameBot(irc.IRCClient):
     # callbacks for events
 
     def signedOn(self):
+        self.msg('NickServ', 'identify %s' % self.factory.nickpass)
         self.join(self.factory.channel)
         
     def joined(self, channel):
         self.sendLine("NAMES %s" % channel)
+
+    def kickedFrom(self, channel, kicker, message):
+        self.join(channel)
 
     def irc_RPL_NAMREPLY(self, prefix, params):
         for name in params[3].split():
@@ -109,7 +114,8 @@ class GameBotFactory(protocol.ClientFactory):
 
     def clientConnectionFailed(self, connector, reason):
         print "connection failed:", reason
-        reactor.stop()
+        connector.connect()
+        #reactor.stop()
 
     def tick(self):
         for bot in self.bots:
@@ -118,7 +124,7 @@ class GameBotFactory(protocol.ClientFactory):
 
 
 if __name__ == '__main__':
-    f = GameBotFactory(sys.argv[1], db_dir = 'db')
+    f = GameBotFactory(sys.argv[1], sys.argv[2], sys.argv[3], db_dir = 'db')
     reactor.connectTCP("irc.dejatoons.net", 6667, f)
     l = task.LoopingCall(f.tick)
     l.start(1.0)

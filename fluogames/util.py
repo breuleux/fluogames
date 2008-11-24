@@ -14,6 +14,10 @@ def format(message, bold = False, underline = False, fg = False, bg = False, col
         message = '$C%s$X%s$C' % (color, message)
     return message
 
+def bold(message):
+    return format(message, bold = True)
+
+
 def parse(message):
     message = message.split()
     def convert(s):
@@ -40,10 +44,10 @@ class Info(object):
             self.public = False
             self.private = True
     def respond(self, message, modality = None, bold = False, underline = False, fg = False, bg = False):
-        if modality == 'public' or modality is None and self.public:
-            self.bot.broadcast(message, bold, underline, fg, bg)
-        else:
-            self.bot.notice(self.user, message, bold, underline, fg, bg)
+#         if modality == 'public' or modality is None and self.public:
+#             self.bot.broadcast(message, bold, underline, fg, bg)
+#         else:
+        self.bot.notice(self.user, message, bold, underline, fg, bg)
     def clearance(self):
         return max(self.bot.user_status.get(self.user, [0]))
 
@@ -64,6 +68,9 @@ def restrict(n):
 def parent_function():
     return inspect.stack()[2]
 
+
+class AbortError(Exception):
+    pass
 
 class UsageError(Exception):
     def __init__(self, message=None):
@@ -91,6 +98,9 @@ class Stateful(object):
 
 class MiniBot(Stateful):
 
+    catch_all_private = False
+    flatten_commands = False
+
     def __init__(self, bot):
         self.bot = bot
 
@@ -107,6 +117,8 @@ class MiniBot(Stateful):
         return [x[8:] for x in dir(self) if x.startswith('command_')]
 
     def get_command(self, command):
+        if not isinstance(command, str):
+            return None
         fn = getattr(self, 'command_' + command, None)
         return fn
 
@@ -159,3 +171,52 @@ class MiniBot(Stateful):
             if self.do_command(info, command, args):
                 return
         self.privmsg_rest(info, orig)
+
+    def help(self, *topics):
+        if not topics:
+            commands = self.get_commands()
+            return [format('Command list:', bold = True, underline = True) + ' '
+                    + ', '.join(sorted(map(bold, commands)))]
+        else:
+            main, topics = topics[0], topics[1:]
+            command = self.get_command(main)
+            if not command:
+                raise UsageError('No such command: %s' % bold(main))
+            if not topics:
+                if hasattr(command, 'help'):
+                    return command.help()
+                else:
+                    answer = []
+                    if command.__doc__:
+                        answer.append('')
+                        for line in map(str.strip, command.__doc__.split('\n')):
+                            if not line:
+                                if answer and answer[-1]:
+                                    answer.append('')
+                            elif answer:
+                                if answer[-1]:
+                                    answer[-1] += ' ' + line
+                                else:
+                                    answer[-1] = line
+                    if not answer:
+                        answer.append('No documentation for %s' % command)
+                    return answer
+            else:
+                if not hasattr(command, 'help'):
+                    raise UsageError('Help for %s has no subtopics.' % bold(main))
+                return command.help(*topics)
+    
+    def command_help(self, info, *topics):
+        """
+        Usage: $Bhelp <topic> [<subtopic1> <subtopic2> ...]$B
+
+        Provides help about the topic specified.
+        """
+        help = self.help(*topics)
+        if isinstance(help, str):
+            info.respond(help)
+        elif isinstance(help, (list, tuple)):
+            map(info.respond, help)
+        else:
+            raise UsageError("There's a bug in the help implementation. It returns a wrong type.")
+        
