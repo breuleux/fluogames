@@ -8,15 +8,6 @@ from collections import defaultdict
 
 prompt_source = None
 
-def setup(db_dir):
-    global prompt_source
-    prompt_source = MultiPrompt(
-        (0.45, FilePrompt(os.path.join(db_dir, 'witty', 'prompts.txt')), 'text'),
-        (0.10, DirPrompt(os.path.join(db_dir, 'witty', 'ircquote')), 'ircquote'),
-        (0.00, XVsYPrompt(os.path.join(db_dir, 'witty', 'rpsi.txt')), 'rpsi'),
-        (0.45, DirPrompt(os.path.join(db_dir, 'witty', 'parametrized')), 'parametrized'),
-        )
-
 def pjoin(prompt):
     return ' '.join(map(str, prompt))
 
@@ -35,7 +26,17 @@ class Witty(game.PhasedGame):
     """
 
     catch_all_private = True
-    
+
+    @staticmethod
+    def setup(db_dir):
+        global prompt_source
+        prompt_source = MultiPrompt(
+            (0.45, FilePrompt(os.path.join(db_dir, 'witty', 'prompts.txt')), 'text'),
+            (0.10, DirPrompt(os.path.join(db_dir, 'witty', 'ircquote')), 'ircquote'),
+            (0.00, XVsYPrompt(os.path.join(db_dir, 'witty', 'rpsi.txt')), 'rpsi'),
+            (0.45, DirPrompt(os.path.join(db_dir, 'witty', 'parametrized')), 'parametrized'),
+            )
+
     def __init__(self, manager, name, channel, arguments):
         super(Witty, self).__init__(manager, name, channel, arguments)
         self.submit_times = [30, 20, 10]
@@ -63,13 +64,6 @@ class Witty(game.PhasedGame):
         self.pts = []
         self.broadcast('A new game of Witty starts!', underline = True)
         self.switch(Submit)
-
-#     def schedule(self, timeouts, switch_to):
-#         self.timeouts = list(timeouts)
-#         self.switch_to = switch_to
-
-#     def remaining(self):
-#         return sum(self.timeouts)
         
     def on_switch_in(self):
         if self.strikes >= self.max_strikes:
@@ -124,19 +118,6 @@ class Witty(game.PhasedGame):
     
     def broadcast(self, message, bold = False, underline = False):
         super(Witty, self).broadcast(message, bold, underline, **self.color)
-
-#     def tick_side(self):
-#         pass
-        
-#     def tick(self):
-#         self.tick_side()
-#         self.timeouts[0] -= 1
-#         if self.timeouts[0] == 0:
-#             self.timeouts[:1] = []
-#             if not self.timeouts:
-#                 self.switch(self.switch_to)
-#             else:
-#                 self.broadcast('%i seconds remaining!' % self.remaining())
 
 
 

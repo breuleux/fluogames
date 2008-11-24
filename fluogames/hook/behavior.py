@@ -87,7 +87,6 @@ class MappedBehavior(Behavior):
 
 class AutoHookExtender(Extender):
     def register(self, name, prop):
-        print name, prop, type(prop)
         if not isinstance(prop, hooks.Hook):
             raise TypeError
         self.__registry__[name] = prop

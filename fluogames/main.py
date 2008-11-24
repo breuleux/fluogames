@@ -8,21 +8,38 @@ from copy import copy
 import greenlet
 
 import sys
+import os
 
-import manager
-import util
+try:
+    from IPython.deep_reload import reload as dreload
+except ImportError:
+    dreload = None
+
+
+# import manager
+# import util
 
 class GameBot(irc.IRCClient):
 
+    def make_manager(self):
+        self.manager = fluogames.manager.Manager(self, self.factory.db_dir)
+        self.manager.add_game('witty', 'fluogames', 'witty', 'Witty')
+        self.manager.add_game('countdown', 'fluogames', 'misc', 'Countdown')
+        self.manager.add_game('mafia', 'fluogames', 'mafia', 'Mafia')
+        #self.manager.add_game('operator', 'operator', 'Operator')
+    
     def connectionMade(self):
         self.factory.bots.append(self)
         self.nickname = self.factory.nickname
         irc.IRCClient.connectionMade(self)
         if not hasattr(self, 'manager'):
-            self.manager = manager.Manager(self, self.factory.db_dir)
-            self.manager.add_game('witty', 'witty', 'Witty')
-            self.manager.add_game('countdown', 'misc', 'Countdown')
-            #self.manager.add_game('operator', 'operator', 'Operator')
+            self.make_manager()
+#         if not hasattr(self, 'manager'):
+#             self.manager = manager.Manager(self, self.factory.db_dir)
+#             self.manager.add_game('witty', 'fluogames', 'witty', 'Witty')
+#             self.manager.add_game('countdown', 'fluogames', 'misc', 'Countdown')
+#             self.manager.add_game('mafia', 'fluogames', 'mafia', 'Mafia')
+#             #self.manager.add_game('operator', 'operator', 'Operator')
         self.user_status = {}
 
     def connectionLost(self, reason):
@@ -72,15 +89,27 @@ class GameBot(irc.IRCClient):
                     self.user_status[arg].append(maps[mode])
                 else:
                     self.user_status[arg].remove(maps[mode])
-                
+
+    def reload_fluo(self):
+        global fluogames
+        if dreload is None:
+            return False
+        fluogames = dreload(fluogames, exclude=['fluogames.main', 'sys', '__builtin__', '__main__'])
+        self.make_manager()
+        
     def privmsg(self, user, channel, msg):
-        self.manager.privmsg(util.Info(self, user, channel), msg)
+        if msg == '!fluoreload' and self.user_status.get(user.split('!')[0], 0) >= 3:
+            if reload_fluo():
+                self.broadcast('reloaded fluogames')
+            else:
+                self.broadcast('could not reload fluogames')
+        self.manager.privmsg(fluogames.util.Info(self, user, channel), msg)
 
     def broadcast(self, message, bold = False, underline = False, fg = False, bg = False):
         self.msg(self.factory.channel, message, bold, underline, fg, bg)
 
     def msg(self, user, message, bold = False, underline = False, fg = False, bg = False):
-        message = util.format(message, bold, underline, fg, bg)
+        message = fluogames.util.format(message, bold, underline, fg, bg)
         message = message.replace('$B', '\002')
         message = message.replace('$C', '\003')
         message = message.replace('$U', '\037')
@@ -88,7 +117,7 @@ class GameBot(irc.IRCClient):
         irc.IRCClient.msg(self, user, message)
 
     def notice(self, user, message, bold = False, underline = False, fg = False, bg = False):
-        message = util.format(message, bold, underline, fg, bg)
+        message = fluogames.util.format(message, bold, underline, fg, bg)
         message = message.replace('$B', '\002')
         message = message.replace('$C', '\003')
         message = message.replace('$U', '\037')
@@ -124,7 +153,7 @@ class GameBotFactory(protocol.ClientFactory):
 
 
 if __name__ == '__main__':
-    f = GameBotFactory(sys.argv[1], sys.argv[2], sys.argv[3], db_dir = 'db')
+    f = GameBotFactory(sys.argv[1], sys.argv[2], sys.argv[3], db_dir = os.path.join('..', 'db'))
     reactor.connectTCP("irc.dejatoons.net", 6667, f)
     l = task.LoopingCall(f.tick)
     l.start(1.0)

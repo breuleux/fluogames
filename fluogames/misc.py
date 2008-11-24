@@ -8,6 +8,7 @@ class Countdown(game.Game):
 
     Count down n seconds.
     """
+    
     def start(self, info):
         if not self.arguments:
             self.timeout = 3
@@ -15,7 +16,7 @@ class Countdown(game.Game):
             self.timeout = self.arguments[0]
             if not isinstance(self.timeout, int) or self.timeout < 0 or self.timeout > 5:
                 raise util.UsageError('Please specify a valid number of seconds (0 <= n <= 5)')
-        self.tick()
+
     def tick(self):
         if self.timeout == 0:
             self.broadcast('GO!')

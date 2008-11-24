@@ -175,7 +175,7 @@ class MiniBot(Stateful):
     def help(self, *topics):
         if not topics:
             commands = self.get_commands()
-            return [format('Command list:', bold = True, underline = True) + ' '
+            return [format('Command list', bold = True, underline = True) + ': '
                     + ', '.join(sorted(map(bold, commands)))]
         else:
             main, topics = topics[0], topics[1:]

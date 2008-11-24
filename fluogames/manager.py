@@ -1,6 +1,7 @@
 
 import util
 import game
+# from IPython.deep_reload import reload as dreload
 
 class Manager(util.MiniBot):
 
@@ -10,19 +11,23 @@ class Manager(util.MiniBot):
         self.game = None
         self.db_dir = db_dir
 
-    def reg_game_command(self, name, module, symbol):
-        if hasattr(module, 'setup'):
-            module.setup(self.db_dir)
-        self.registry[name] = (module, symbol)
+    def reg_game_command(self, name, module, hier):
+        self.registry[name] = (module, hier)
         def fn(info, *args):
             self.command_play(info, name, *args)
-        fn.__doc__ = getattr(module, symbol).__doc__
+        gclass = module
+        for symbol in hier:
+            gclass = getattr(gclass, symbol)
+        if hasattr(gclass, 'setup'):
+            gclass.setup(self.db_dir)
+        fn.__doc__ = gclass.__doc__
         setattr(self, 'command_%s' % name, fn)
 
-    def add_game(self, name, module, symbol):
+    def add_game(self, name, module, *hier):
+        #module = __import__('.'.join((module,) + hier[:-1]), fromlist = hier[-1:])
         module = __import__(module)
         try:
-            self.reg_game_command(name, module, symbol)
+            self.reg_game_command(name, module, hier)
         except:
             self.broadcast('Failed to load %s' % name)
             raise
@@ -34,11 +39,15 @@ class Manager(util.MiniBot):
 
     def reload(self):
         self.abort()
-        for name, (module, symbol) in self.registry.iteritems():
-            print name, (module, symbol)
+        for name, (module, hier) in self.registry.iteritems():
             try:
                 module = reload(module)
-                self.reg_game_command(name, module, symbol)
+                #module = dreload(module)
+                m = module
+                for symbol in hier[:-1]:
+                    m = getattr(m, symbol)
+                    reload(m)
+                self.reg_game_command(name, module, hier)
             except:
                 self.broadcast('Failed to reload %s' % name)
                 raise
@@ -67,11 +76,13 @@ class Manager(util.MiniBot):
         instead.
         """
         try:
-            module, symbol = self.registry[name]
+            module, hier = self.registry[name]
         except KeyError:
             info.respond('No such game: %s' % name)
             return
-        gclass = getattr(module, symbol)
+        gclass = module
+        for h in hier:
+            gclass = getattr(gclass, h)
         if not issubclass(gclass, game.Game):
             print gclass, gclass.__bases__, game.Game
             print gclass.__bases__[0].__bases__
@@ -113,6 +124,22 @@ class Manager(util.MiniBot):
         self.broadcast('Games reloaded by %s.' % info.user)
         self.reload()
 
+    def help(self, *topics):
+        if not topics:
+            answer = super(Manager, self).help()
+            if self.game:
+                answer2 = self.game.help()
+                answer2[0] = '%s: %s' % (util.format(self.game.name, bold=True, underline=True), answer2[0].replace('$U$BCommand list$B$U: ', ''))
+                answer += answer2
+            return answer
+        try:
+            return super(Manager, self).help(*topics)
+        except:
+            if self.game:
+                return self.game.help(*topics)
+            else:
+                raise
+        
     def tick(self):
         if self.game:
             try:

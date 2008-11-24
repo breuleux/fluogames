@@ -4,6 +4,7 @@ Lalala mafia
 
 from .. import game
 from .. import util
+from ..util import UsageError
 from .. import hook
 
 import os
@@ -30,7 +31,8 @@ class Mafia(game.PhasedGame):
     
     def __init__(self, manager, name, channel, arguments):
         super(Mafia, self).__init__(manager, name, channel, arguments)
-        self.color = dict(fg = None, bg = None)
+        self.color = dict(fg = False, bg = False)
+        self.join_times = [30, 20, 10]
         self.night_times = [30, 30]
         self.vote_times = [45, 35, 10]
 
@@ -48,18 +50,18 @@ class Mafia(game.PhasedGame):
         self.switch(self.type)
 
     def broadcast(self, message, bold = False, underline = False):
-        super(Witty, self).broadcast(message, bold, underline, **self.color)
+        super(Mafia, self).broadcast(message, bold, underline, **self.color)
 
 
 class Join(Mafia):
 
-    def switch_in(self):
+    def on_switch_in(self):
         self.announce = []
         self.unannounce = []
         self.players = []
         self.schedule(self.join_times, self.starting_phase)
 
-    def switch_out(self):
+    def on_switch_out(self):
         if len(self.players) < self.min_players:
             raise util.AbortError('There are not enough players. At least %i are required.'
                                   % self.min_players)
@@ -80,7 +82,7 @@ class Join(Mafia):
             raise UsageError('You had not joined!')
 
     def tick(self):
-        for l, txt in ((self.announce, 'joined'), (self.unannounce, 'unjoined'))
+        for l, txt in ((self.announce, 'joined'), (self.unannounce, 'unjoined')):
             n = len(l)
             l[:], l = [], map(util.bold, l)
             if n == 1:
