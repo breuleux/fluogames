@@ -2,10 +2,9 @@
 Lalala mafia
 """
 
-from .. import game
-from .. import util
-from ..util import UsageError
-from .. import hook
+from fluogames import game
+from fluogames import util
+from fluogames import hook
 
 import os
 import random
@@ -44,9 +43,10 @@ class Mafia(game.PhasedGame):
         try:
             self.type = types[self.type_name]
         except KeyError:
-            raise UsageError('Unknown mafia game type: %s (available types are: %s)'
+            raise util.UsageError('Unknown mafia game type: %s (available types are: %s)'
                              % (self.type_name, ', '.join(sorted(types.keys()))))
         self.broadcast('A new game of %s mafia starts!' % self.type_name)
+        self.players = [info.user]
         self.switch(self.type)
 
     def broadcast(self, message, bold = False, underline = False):
@@ -56,30 +56,40 @@ class Mafia(game.PhasedGame):
 class Join(Mafia):
 
     def on_switch_in(self):
-        self.announce = []
+        self.announce = list(self.players)
         self.unannounce = []
-        self.players = []
         self.schedule(self.join_times, self.starting_phase)
 
     def on_switch_out(self):
         if len(self.players) < self.min_players:
             raise util.AbortError('There are not enough players. At least %i are required.'
                                   % self.min_players)
+
+    def command_status(self, info):
+        if not self.players:
+            ans = '0 players? Not even the person who started the game? How did this happen? :('
+        else:
+            np = len(self.players)
+            ans = '%i player%s so far: %s' \
+                % (np, 's' if np > 1 else '',
+                   ', '.join(map(util.bold, self.players)))
+        ans += ' (%i seconds remain)' % self.remaining()
+        info.respond(ans)
         
     def command_join(self, info):
         if info.user in self.players:
-            raise UsageError('You already joined!')
+            raise util.UsageError('You already joined!')
         self.announce.append(info.user)
         self.players.append(info.user)
-        if len(self.players) == self.max_players:
+        if self.max_players and len(self.players) == self.max_players:
             self.switch(self.starting_phase)
 
-    def command_remove(self, info):
+    def command_unjoin(self, info):
         try:
             self.players.remove(info.user)
             self.unannounce.append(info.user)
         except:
-            raise UsageError('You had not joined!')
+            raise util.UsageError('You had not joined!')
 
     def tick(self):
         for l, txt in ((self.announce, 'joined'), (self.unannounce, 'unjoined')):

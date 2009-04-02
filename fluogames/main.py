@@ -10,14 +10,14 @@ import greenlet
 import sys
 import os
 
-try:
-    from IPython.deep_reload import reload as dreload
-except ImportError:
-    dreload = None
+# try:
+#     from IPython.deep_reload import reload as dreload
+# except ImportError:
+#     dreload = None
 
 
-# import manager
-# import util
+import fluogames.manager
+import fluogames.util
 
 class GameBot(irc.IRCClient):
 
@@ -25,7 +25,7 @@ class GameBot(irc.IRCClient):
         self.manager = fluogames.manager.Manager(self, self.factory.db_dir)
         self.manager.add_game('witty', 'fluogames', 'witty', 'Witty')
         self.manager.add_game('countdown', 'fluogames', 'misc', 'Countdown')
-        self.manager.add_game('mafia', 'fluogames', 'mafia', 'Mafia')
+        #self.manager.add_game('mafia', 'mafia', 'Mafia')
         #self.manager.add_game('operator', 'operator', 'Operator')
     
     def connectionMade(self):
@@ -57,6 +57,7 @@ class GameBot(irc.IRCClient):
         self.join(self.factory.channel)
         
     def joined(self, channel):
+        self.user_status = {}
         self.sendLine("NAMES %s" % channel)
 
     def kickedFrom(self, channel, kicker, message):
@@ -73,7 +74,11 @@ class GameBot(irc.IRCClient):
 
     def userJoined(self, user, channel):
         self.user_status[user.split('!', 1)[0]] = [0]
-        
+
+    def userRenamed(self, oldname, newname):
+        self.user_status[newname] = self.user_status[oldname]
+        del self.user_status[oldname]
+    
     def modeChanged(self, user, channel, set, modes, args):
         changes = []
         adding = set
@@ -90,19 +95,19 @@ class GameBot(irc.IRCClient):
                 else:
                     self.user_status[arg].remove(maps[mode])
 
-    def reload_fluo(self):
-        global fluogames
-        if dreload is None:
-            return False
-        fluogames = dreload(fluogames, exclude=['fluogames.main', 'sys', '__builtin__', '__main__'])
-        self.make_manager()
+#     def reload_fluo(self):
+#         global fluogames
+#         if dreload is None:
+#             return False
+#         fluogames = dreload(fluogames, exclude=['fluogames.main', 'sys', '__builtin__', '__main__'])
+#         self.make_manager()
         
     def privmsg(self, user, channel, msg):
-        if msg == '!fluoreload' and self.user_status.get(user.split('!')[0], 0) >= 3:
-            if reload_fluo():
-                self.broadcast('reloaded fluogames')
-            else:
-                self.broadcast('could not reload fluogames')
+#         if msg == '!fluoreload' and self.user_status.get(user.split('!')[0], 0) >= 3:
+#             if reload_fluo():
+#                 self.broadcast('reloaded fluogames')
+#             else:
+#                 self.broadcast('could not reload fluogames')
         self.manager.privmsg(fluogames.util.Info(self, user, channel), msg)
 
     def broadcast(self, message, bold = False, underline = False, fg = False, bg = False):

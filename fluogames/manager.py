@@ -1,7 +1,7 @@
 
 import util
 import game
-# from IPython.deep_reload import reload as dreload
+from IPython.deep_reload import reload as dreload
 
 class Manager(util.MiniBot):
 
@@ -41,8 +41,8 @@ class Manager(util.MiniBot):
         self.abort()
         for name, (module, hier) in self.registry.iteritems():
             try:
-                module = reload(module)
-                #module = dreload(module)
+                #module = reload(module)
+                module = dreload(module, exclude = ['fluogames', 'sys', '__builtin__', '__main__'])
                 m = module
                 for symbol in hier[:-1]:
                     m = getattr(m, symbol)
@@ -144,6 +144,9 @@ class Manager(util.MiniBot):
         if self.game:
             try:
                 self.game.tick()
+            except util.AbortError, e:
+                self.abort()
+                self.broadcast('$BGame aborted:$B %s' % e)
             except Exception, e:
                 self.abort()
                 self.broadcast('An error occurred in tick(): [%s]. The game was aborted.' % e)

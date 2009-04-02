@@ -164,7 +164,7 @@ class Submit(Witty):
         message = ' '.join(map(str, message))
         if info.user in self.submittals:
             self.submittals[info.user][1] = message
-            info.respond('You have reviewed your entry: %s' % message)
+            info.respond('You have revised your entry: %s' % message)
         else:
             self.n += 1
             self.players.add(info.user)
