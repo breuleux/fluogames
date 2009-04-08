@@ -1,6 +1,8 @@
+from __future__ import with_statement
 
 import re
 import os
+from copy import copy
 
 assignment_pattern = re.compile('^([a-zA-Z0-9_]*) *=.*$')
 
@@ -11,10 +13,13 @@ class BoolOption(object):
         self.description = description
 
     def filter(self, v):
-        if v in ('y', 'yes'): return True
-        if v in ('n', 'no'): return False
-        return bool(v)
-        
+        if v in ('y', 'yes', 'true', 'True', '1', 1): return True
+        if v in ('n', 'no', 'false', 'False', '0', 0): return False
+        raise ValueError('Cannot convert %s to boolean.' % v)
+
+    def represent(self, v):
+        return repr(v)
+    
 
 class StringOption(object):
 
@@ -37,6 +42,18 @@ class StringOption(object):
     def represent(self, v):
         return repr(v)
 
+
+class PathOption(object):
+
+    def __init__(self, description = ""):
+        self.description = description
+
+    def filter(self, v):
+        return os.path.realpath(os.path.expanduser(v))
+
+    def represent(self, v):
+        return repr(v)
+        
 
 class NumericOption(object):
 
@@ -79,29 +96,35 @@ class Configurator(object):
         self.options = options
 
     def load(self, path, file = 'conf.py'):
-        curpath = os.path.curdir()
+        curpath = os.path.curdir
         os.chdir(path)
         try:
             d = {}
-            execfile(file, globals = d, locals = {})
+            execfile(file, {}, d)
             d = self.filter_all(d)
-            return d
         finally:
             os.chdir(curpath)
+        for k in self.options:
+            if k not in d:
+                raise Exception('Could not find a value for required option: %s' % k)
+        return d
 
-    def filter(self, k, v):
+    def filter(self, k, v, strict = False):
         if k not in self.options:
-            raise Exception('Unknown option: %s' % k)
+            if strict:
+                raise Exception('Unknown option: %s' % k)
+            else:
+                return v 
         return self.options[k].filter(v)
             
-    def filter_all(self, d):
+    def filter_all(self, d, strict = False):
         new_d = {}
         for k, v in d.iteritems():
-            new_d[k] = self.filter(k, v)
+            new_d[k] = self.filter(k, v, strict = strict)
         return new_d
 
     def commit(self, delta, path, file = 'conf.py'):
-        delta = self.filter_all(delta)
+        delta = self.filter_all(delta, strict = True)
         
         file = os.path.join(path, file)
         newlines = []
@@ -113,7 +136,7 @@ class Configurator(object):
             lines = []
 
         for line in lines:
-            match = assignment_pattern.match(line):
+            match = assignment_pattern.match(line)
             if match:
                 k = match.groups()[0]
                 if k in delta and k in self.options:
@@ -132,67 +155,39 @@ class Configurator(object):
         with open(file, 'w') as f:
             f.writelines(newlines)
 
-
-conf = Configurator(
-    root = StringOption(description = """
-The root of the configuration and the database(s) used by the bot
-and the games. Running "fluobot run" with no arguments will by
-default use the configuration in ~/.fluobot/conf.py, but you may
-pass a different configuration directory or file if you wish."""
-                        )
-    network = StringOption(min_length = 1, description = """
-Network that the bot should connect to."""
-                           )
-    channel = StringOption(min_length = 1, description = """
-Channel that the bot should join."""
-                           )
-    nickname = StringOption(min_length = 1, description = """
-Nickname of the bot"""
-                            )
-    nickpass = StringOption(description = """
-Password for the bot's nickname"""
-                            )
-    nicksuffix = StringOption(description = 
-"""Suffix to append to the nickname if it is already occupied (could be
-added multiple times). The bot will try to use the same pass."""
-                              )
-    reconnect = BoolOption(description = 
-"""If reconnect is True, the bot will automatically try to connect to
-the network again if it is disconnected."""
-                             )
-    autoghost = BoolOption(description =
-"""If its nickname is taken and autoghost is True, the bot will
-automatically try to ghost it (forcefully disconnect it) and change
-back to its original nickname."""
-                             )
-    prefix = StringOption(description =
-"""Default prefix for commands when entered in a channel. If set to
-None, there will be no prefix."""
-                          )
-    auth = StringOption(description =
-"""
-Module to use to identify nicknames to an account and
-to handle their permissions.
-fluobot.auth.natural requires no logging in and uses
- operator status in order to grant permissions"""
-                        )
-    )
-
-defaults = dict(
-    root = "~/.fluobot",
-    network = "",
-    channel = "",
-    nickname = "",
-    nickpass = "",
-    nicksuffix = '_',
-    reconnect = 'y',
-    autoghost = 'y',
-    prefix = "!",
-    auth = "fluobot.auth.natural"
-    )
+    def promptfor(self, options, d):
+        d = copy(d)
+        for option in options:
+            o = self.options[option]
+            print
+            print o.description
+            if hasattr(o, 'prompt'):
+                prompt = o.prompt
+            else:
+                prompt = option
+            while True:
+                if option in d:
+                    print  '>', prompt, '[%s]:' % d[option],
+                else:
+                    print  '>', "%s:" % prompt,
+                x = raw_input()
+                if x == "":
+                    if option in d:
+                        x = d[option]
+                    else:
+                        print 'This field is required. Please enter something.'
+                        continue
+                try:
+                    v = o.filter(x)
+                    d[option] = v
+                    break
+                except Exception, e:
+                    print e.message
+        d = self.filter_all(d)
+        return d
 
 
-conf.commit(defaults, '.', 'blablabla.py')
+
 
 
 

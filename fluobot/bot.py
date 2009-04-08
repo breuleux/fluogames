@@ -3,46 +3,40 @@
 from twisted.words.protocols import irc
 from twisted.internet import reactor, protocol, task
 
-from random import randint, shuffle
-from copy import copy
-import greenlet
-
 import sys
 import os
 
-# try:
-#     from IPython.deep_reload import reload as dreload
-# except ImportError:
-#     dreload = None
+import util
+import manager
 
 
-import fluogames.manager
-import fluogames.util
+class FluoBot(irc.IRCClient):
 
-class GameBot(irc.IRCClient):
+    def make_manager(self, reload = False):
+        self.manager = manager.IdleManager('manager', self, os.path.join(self.conf['root'], 'data'), self.conf, reload = reload)
+#         self.manager.add_game('witty', 'fluogames', 'witty', 'Witty')
+#         self.manager.add_game('countdown', 'fluogames', 'misc', 'Countdown')
+#         #self.manager.add_game('mafia', 'mafia', 'Mafia')
+#         #self.manager.add_game('operator', 'operator', 'Operator')
 
-    def make_manager(self):
-        self.manager = fluogames.manager.Manager(self, self.factory.db_dir)
-        self.manager.add_game('witty', 'fluogames', 'witty', 'Witty')
-        self.manager.add_game('countdown', 'fluogames', 'misc', 'Countdown')
-        #self.manager.add_game('mafia', 'mafia', 'Mafia')
-        #self.manager.add_game('operator', 'operator', 'Operator')
-    
     def connectionMade(self):
+        print "Connection made."
+
         self.factory.bots.append(self)
-        self.nickname = self.factory.nickname
+        
+        self.conf = self.factory.conf
+
+        self.channel = self.conf['channel']
+        self.nickname = self.conf['nickname']
+        self.nickpass = self.conf['nickpass']
+
         irc.IRCClient.connectionMade(self)
         if not hasattr(self, 'manager'):
             self.make_manager()
-#         if not hasattr(self, 'manager'):
-#             self.manager = manager.Manager(self, self.factory.db_dir)
-#             self.manager.add_game('witty', 'fluogames', 'witty', 'Witty')
-#             self.manager.add_game('countdown', 'fluogames', 'misc', 'Countdown')
-#             self.manager.add_game('mafia', 'fluogames', 'mafia', 'Mafia')
-#             #self.manager.add_game('operator', 'operator', 'Operator')
         self.user_status = {}
 
     def connectionLost(self, reason):
+        print "Connection lost."
         self.factory.bots.remove(self)
         irc.IRCClient.connectionLost(self, reason)
 
@@ -53,8 +47,8 @@ class GameBot(irc.IRCClient):
     # callbacks for events
 
     def signedOn(self):
-        self.msg('NickServ', 'identify %s' % self.factory.nickpass)
-        self.join(self.factory.channel)
+        self.msg('NickServ', 'identify %s' % self.nickpass)
+        self.join(self.channel)
         
     def joined(self, channel):
         self.user_status = {}
@@ -108,58 +102,184 @@ class GameBot(irc.IRCClient):
 #                 self.broadcast('reloaded fluogames')
 #             else:
 #                 self.broadcast('could not reload fluogames')
-        self.manager.privmsg(fluogames.util.Info(self, user, channel), msg)
+        self.manager.privmsg(util.Info(self, user, channel), msg)
 
     def broadcast(self, message, bold = False, underline = False, fg = False, bg = False):
-        self.msg(self.factory.channel, message, bold, underline, fg, bg)
+        self.msg(self.channel, message, bold, underline, fg, bg)
 
     def msg(self, user, message, bold = False, underline = False, fg = False, bg = False):
-        message = fluogames.util.format(message, bold, underline, fg, bg)
-        message = message.replace('$B', '\002')
-        message = message.replace('$C', '\003')
-        message = message.replace('$U', '\037')
-        message = message.replace('$X', '\002\002')
-        irc.IRCClient.msg(self, user, message)
+        if isinstance(message, (list, tuple)):
+            for m in message:
+                self.msg(user, m, bold, underline, fg, bg)
+            return
+        message = util.format(message, bold, underline, fg, bg)
+        for m in message.split('\n'):
+            if m:
+                irc.IRCClient.msg(self, user, m)
 
     def notice(self, user, message, bold = False, underline = False, fg = False, bg = False):
-        message = fluogames.util.format(message, bold, underline, fg, bg)
-        message = message.replace('$B', '\002')
-        message = message.replace('$C', '\003')
-        message = message.replace('$U', '\037')
-        message = message.replace('$X', '\002\002')
-        irc.IRCClient.notice(self, user, message)
+        if isinstance(message, (list, tuple)):
+            for m in message:
+                self.notice(user, m, bold, underline, fg, bg)
+            return
+        message = util.format(message, bold, underline, fg, bg)
+        for m in message.split('\n'):
+            if m:
+                irc.IRCClient.notice(self, user, m)
 
     def tick(self):
         self.manager.tick()
 
+    def tick10(self):
+        self.manager.tick10()
 
-class GameBotFactory(protocol.ClientFactory):
-    protocol = GameBot
 
-    def __init__(self, channel, nickname = None, nickpass = None, db_dir = None):
-        self.channel = channel
-        self.nickname = nickname
-        self.nickpass = nickpass
-        self.db_dir = db_dir
+
+class FluoBotFactory(protocol.ClientFactory):
+    protocol = FluoBot
+
+    def __init__(self, conf):
         self.bots = []
+        self.conf = conf
 
     def clientConnectionLost(self, connector, reason):
-        connector.connect()
+        if self.conf['reconnect']:
+            print "Reconnecting..."
+            connector.connect()
+        else:
+            reactor.stop()
 
     def clientConnectionFailed(self, connector, reason):
         print "connection failed:", reason
-        connector.connect()
-        #reactor.stop()
+        if self.conf['reconnect']:
+            connector.connect()
+        else:
+            reactor.stop()
 
     def tick(self):
         for bot in self.bots:
             bot.tick()
 
+    def tick10(self):
+        for bot in self.bots:
+            bot.tick10()
 
 
-if __name__ == '__main__':
-    f = GameBotFactory(sys.argv[1], sys.argv[2], sys.argv[3], db_dir = os.path.join('..', 'db'))
-    reactor.connectTCP("irc.dejatoons.net", 6667, f)
-    l = task.LoopingCall(f.tick)
-    l.start(1.0)
+
+def start(conf):
+    f = FluoBotFactory(conf)
+    reactor.connectTCP(conf['network'], 6667, f)
+    t1 = task.LoopingCall(f.tick)
+    t1.start(1.0)
+    t2 = task.LoopingCall(f.tick10)
+    t2.start(0.1)
     reactor.run()
+    
+
+
+# if __name__ == '__main__':
+#     f = FluoBotFactory(sys.argv[1], sys.argv[2], sys.argv[3], db_dir = os.path.join('..', 'db'))
+#     reactor.connectTCP("irc.dejatoons.net", 6667, f)
+#     l = task.LoopingCall(f.tick)
+#     l.start(1.0)
+#     reactor.run()
+
+
+
+
+################
+# CONFIGURATOR #
+################
+
+from conf import Configurator, PathOption, StringOption, BoolOption
+import util
+import os
+
+configurator = Configurator(
+
+    root = PathOption(description =        
+"""The root of the configuration and the database(s) used by the bot
+and the games. Running "fluobot run" with no arguments will by default
+use the configuration in ~/.fluobot, but you may pass a different
+configuration directory if you wish. The directory you specify will be
+created if it does not already exist."""
+                        ),
+    
+    network = StringOption(min_length = 1, description = 
+"""Network that the bot should connect to."""
+                           ),
+    
+    channel = StringOption(min_length = 1, description =
+"""Channel that the bot should join."""
+                           ),
+    
+    nickname = StringOption(min_length = 1, description =
+"""Nickname of the bot"""
+                            ),
+    
+    nickpass = StringOption(description =
+"""Password for the bot's nickname"""
+                            ),
+    
+#     nicksuffix = StringOption(description = 
+# """Suffix to append to the nickname if it is already occupied (could be
+# added multiple times). The bot will try to use the same pass."""
+#                               ),
+    
+    reconnect = BoolOption(description = 
+"""If reconnect is True, the bot will automatically try to connect to
+the network again if it is disconnected."""
+                             ),
+    
+    autoload_plugins = BoolOption(description = 
+"""If True, any package located in the /plugins directory will be
+loaded automatically."""
+                             ),
+    
+#     autoghost = BoolOption(description =
+# """If its nickname is taken and autoghost is True, the bot will
+# automatically try to ghost it (forcefully disconnect it) and change
+# back to its original nickname."""
+#                              ),
+
+    public_prefix = StringOption(description =
+"""Default prefix for commands when entered in a channel. You can give
+more than one prefix if you separate them with spaces. For example,
+public_prefix = '! @' would allow you to use !command or @command. You
+can have multi-character prefixes, but put the longer prefixes
+before. If public_prefix = ' ' or if it ends with a space, then no
+prefix will be needed to use commands."""
+                                 ),
+
+    private_prefix = StringOption(description =
+"""Default prefix for commands when entered in private. You can give
+more than one prefix if you separate them with spaces. For example,
+public_prefix = '! @' would allow you to use !command or @command. You
+can have multi-character prefixes, but put the longer prefixes
+before. If public_prefix = ' ' or if it ends with a space, then no
+prefix will be needed to use commands."""
+                                 ),
+
+    auth = StringOption(description =
+"""Module to use to identify nicknames to an account and
+to handle their permissions.
+fluobot.auth.natural requires no logging in and uses
+ operator status in order to grant permissions"""
+                        ),
+    )
+
+conf_defaults = dict(
+    root = "~/.fluobot",
+    #network = "",
+    #channel = "",
+    #nickname = "",
+    nickpass = "",
+    #nicksuffix = '_',
+    reconnect = 'y',
+    #autoghost = 'y',
+    autoload_plugins = 'y',
+    public_prefix = "!",
+    private_prefix = "! ",
+    auth = "fluobot.auth.natural",
+    )
+

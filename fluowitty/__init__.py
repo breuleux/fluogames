@@ -6,6 +6,11 @@ import random
 
 from collections import defaultdict
 
+
+__fluogame__ = True
+__fluoname__ = 'witty'
+
+
 prompt_source = None
 
 def pjoin(prompt):

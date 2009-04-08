@@ -1,14 +1,209 @@
 #! /usr/bin/env python
 
+from __future__ import with_statement
+
+
+# from twisted.internet import reactor, task
+# from fluogames import *
+
+# if __name__ == '__main__':
+#     f = GameBotFactory(sys.argv[1], sys.argv[2], sys.argv[3], db_dir = os.path.join('..', 'db'))
+#     reactor.connectTCP("irc.dejatoons.net", 6667, f)
+#     l = task.LoopingCall(f.tick)
+#     l.start(1.0)
+#     reactor.run()
+
+
+
 import sys
 import os
-from twisted.internet import reactor, task
-from fluogames import *
+from fluobot.bot import start, configurator, conf_defaults
+
+
+def prompt_conf():
+
+    print "Creating a new fluobot configuration."
+    print "====================================="
+
+    d = configurator.promptfor(['root'],
+                               conf_defaults)
+    root = d['root']
+
+    if os.path.exists(os.path.join(root, 'conf.py')):
+        print '%s seems to already contain a configuration file, do you still want to proceed? (y/n) [n]' % root,
+        if raw_input() != 'y':
+            return False
+    
+    d = configurator.promptfor(['network',
+                                'channel',
+                                'nickname',
+                                'nickpass',
+                                'nicksuffix',
+                                'reconnect',
+                                'autoghost',
+                                'public_prefix',
+                                'private_prefix',
+                                'auth'],
+                           d)
+
+    if not os.path.exists(root):
+        os.makedirs(root)
+    os.makedirs(os.path.join(root, 'plugins'))
+    os.makedirs(os.path.join(root, 'data'))
+
+    configurator.commit(d, root)
+
+    print
+    games = add_games(d)
+
+    with open(os.path.join(root, 'conf.py'), 'a') as f:
+        print >>f, """
+
+plugins = []
+plugins.append(('override', 'fluobot.plugins.admin', True, False, True))
+plugins.append(('admin', 'fluobot.plugins.admin', True, True, False))
+
+import os
+import sys
+from fluobot.util import resolve
+plugindir = os.path.join(root, 'plugins')
+sys.path.insert(1, plugindir)
+
+if autoload_plugins:
+    for x in os.listdir(plugindir):
+        if x.endswith('.py'): x = x[:-3]
+        try:
+            m = resolve(x)
+            m.__fluostart__
+        except Exception, e:
+            print >>sys.stderr, 'Failed to load %s in the plugins directory: %s' % (x, e.message)
+            continue
+        if m.__fluostart__:
+            plugins.append((getattr(m, '__fluoname__', x),
+                            x,
+                            getattr(m, '__fluoenabled__', True),
+                            getattr(m, '__fluointegrated__', False),
+                            getattr(m, '__fluoprioritary__', False)))
+"""
+
+        for game in games:
+            print >>f, 'plugins.append(%s)' % game
+        
+
+
+def add_games(d):
+
+    print "Adding games"
+    print "============"
+    print
+    print "You may add new games to your bot right away."
+    print "Note that you may add the same game several times,"
+    print "if you give it a different name each time."
+    print "Examples of games: fluowitty"
+    print
+
+    root = d['root']
+    curdir = os.curdir
+
+    games = []
+    
+    while True:
+        print "> Type out a game module to add (or Enter to finish):",
+        game = raw_input()
+        if game == "":
+            break
+        try:
+            module = util.resolve(game)
+        except ImportError:
+            print 'Could not import module %s' % game
+            continue
+        if not hasattr(module, '__fluostart__') or not module.__fluostart__:
+            print 'Cannot install %s: module does not have a __fluostart__ attribute or it is set to False.' % game
+            continue
+        
+        print "> What name do you want to give the game? [%s]" % getattr(module, '__fluoname__', game),
+        name = raw_input()
+        if not name:
+            name = game
+
+        dir = os.path.join(root, 'plugins', name)
+        try:
+            os.makedirs(dir)
+        except IOError:
+            print "%s is already taken" % name
+
+        print "You may initialize the game's settings and populate it with"
+        print "data if applicable. You may enter an url or a path containing"
+        print "the initial contents of the game's workspace or 'clean' if"
+        print "you want to start with a clean state."
+        print "> How do you want to initialize %s? [clean]" % name,
+        loc = raw_input()
+        if not loc:
+            loc = 'clean'
+
+        try:
+            if loc != 'clean':
+                if loc.startswith('http://'):
+                    # copy from url
+                    raise NotImplementedError()
+                else:
+                    loc = os.path.realpath(os.path.expanduser(loc))
+                    shutil.copytree(loc, dir, symlinks = True)
+            games.append((name, game, True, False))
+        except Exception, e:
+            print 'remove', dir
+            #shutil.rmtree(dir)
+            print "Install of %s failed: %s" % (game, e)
+
+    print "Configuration successful!"
+    return games
+
+
+
+
+
+def command_run(confroot = '~/.fluobot'):
+    """Usage: fluobot run [configuration root]
+
+    Run fluobot using the specified configuration root.
+    Default root is ~/.fluobot
+    """
+    conf = configurator.load(confroot)
+    start(conf)
+
+
+def command_create():
+    """Usage: fluobot create
+
+    Create a new configuration.
+    """
+    prompt_conf()
+
+
+
+def main():
+    
+    argv = sys.argv[1:]
+    
+    if not argv:
+        print """Usage:
+fluobot create
+fluobot run [configuration root]"""
+        return
+    
+    cmd = 'command_%s' % argv[0]
+    if cmd not in globals():
+        print "Unknown command: %s" % argv[0]
+        return
+
+    globals()[cmd](*argv[1:])
+
 
 if __name__ == '__main__':
-    f = GameBotFactory(sys.argv[1], sys.argv[2], sys.argv[3], db_dir = os.path.join('..', 'db'))
-    reactor.connectTCP("irc.dejatoons.net", 6667, f)
-    l = task.LoopingCall(f.tick)
-    l.start(1.0)
-    reactor.run()
+    main()
+    
+
+
+
+
 
