@@ -60,8 +60,11 @@ def prompt_conf():
         print >>f, """
 
 plugins = []
+# To add a new plugin, do
+# plugins.append(name, module, enabled, integrated, prioritary)
 plugins.append(('override', 'fluobot.plugins.admin', True, False, True))
 plugins.append(('admin', 'fluobot.plugins.admin', True, True, False))
+plugins.append(('auth', auth, True, True, False))
 
 import os
 import sys

@@ -64,14 +64,14 @@ class FluoBot(irc.IRCClient):
             while name[0] in pfx:
                 perms.append(pfx.index(name[0]) + 1)
                 name = name[1:]
-            self.user_status[name] = perms
+            self.user_status[name.lower()] = perms
 
     def userJoined(self, user, channel):
-        self.user_status[user.split('!', 1)[0]] = [0]
+        self.user_status[user.split('!', 1)[0].lower()] = [0]
 
     def userRenamed(self, oldname, newname):
-        self.user_status[newname] = self.user_status[oldname]
-        del self.user_status[oldname]
+        self.user_status[newname] = self.user_status[oldname.lower()]
+        del self.user_status[oldname.lower()]
     
     def modeChanged(self, user, channel, set, modes, args):
         changes = []
@@ -82,12 +82,12 @@ class FluoBot(irc.IRCClient):
             else: changes.append((c, adding))
         changes = changes[-len(args):]
         for (mode, adding), arg in zip(changes, args):
-            maps = dict(o=3, h=2, v=1)
+            maps = dict(q=5, a=4, o=3, h=2, v=1)
             if mode in maps:
                 if adding:
-                    self.user_status[arg].append(maps[mode])
+                    self.user_status[arg.lower()].append(maps[mode])
                 else:
-                    self.user_status[arg].remove(maps[mode])
+                    self.user_status[arg.lower()].remove(maps[mode])
 
 #     def reload_fluo(self):
 #         global fluogames
@@ -280,6 +280,6 @@ conf_defaults = dict(
     autoload_plugins = 'y',
     public_prefix = "!",
     private_prefix = "! ",
-    auth = "fluobot.auth.natural",
+    auth = "fluobot.plugins.chanauth",
     )
 

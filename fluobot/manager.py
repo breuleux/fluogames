@@ -3,10 +3,7 @@ from __future__ import with_statement
 import os
 import util
 import traceback
-
-#import game
-#from IPython.deep_reload import reload as dreload
-
+ 
 
 class ManagerPhases:
     
@@ -14,7 +11,7 @@ class ManagerPhases:
     def __phases__(cls):
         return dict(idle = IdleManager,
                     playing = PlayingManager)
-    
+
 
 class IdleManager(ManagerPhases, util.StandardPlugin):
 
@@ -31,7 +28,6 @@ class IdleManager(ManagerPhases, util.StandardPlugin):
     def on_switch_in(self):
         if self.game:
             self.prioritary_plugins.remove(self.game)
-            #self._compile_plugins_order()
             self.game.integrated = False
             self.game = None
 
@@ -53,28 +49,9 @@ class IdleManager(ManagerPhases, util.StandardPlugin):
         else:
             self.plugins.append(inst)
         self.plugins_map[name] = (module_name, enabled, integrated, prioritary, inst)
-        #self._compile_plugins_order()
 
-#     def _update_commands(self, commands, plugin, integrated):
-#         return commands, integrated and getattr(plugin, 'catchall')
-##            commands = _update_commands(commands, plugin, plugin.integrated)
-
-#     def _compile_plugins_order(self):
-#         priv = []
-#         pub = []
-#         done_priv = False
-#         done_pub = False
-#         for plugin in self.prioritary_plugins + self.plugins:
-#             if not done_priv: priv.append(plugin)
-#             if not done_pub: pub.append(plugin)
-#             if getattr(plugin, 'catchall_private', False):
-#                 done_priv = True
-#             if getattr(plugin, 'catchall_public', False):
-#                 done_pub = True
-#             if done_priv and done_pub:
-#                 break
-#         self.priv_plugins = priv
-#         self.pub_plugins = pub
+    def get_plugin(self, name):
+        return self.plugins_map[name][-1]
 
     def pub_plugins(self):
         list = []
@@ -138,15 +115,6 @@ class IdleManager(ManagerPhases, util.StandardPlugin):
                 and getattr(privp[-1], 'catchall_private', False):
             privp[-1].privmsg(info, message)
 
-    
-
-    def command_yeah(self, info):
-        """
-        Woop dee doo
-        ya
-        """
-        self.broadcast('oh. yeah')
-
 
 
 class PlayingManager(IdleManager):
@@ -155,7 +123,6 @@ class PlayingManager(IdleManager):
         if self.game:
             self.game.integrated = True
             self.prioritary_plugins.append(self.game)
-            #self._compile_plugins_order()
 
     def start(self, game):
         raise util.UsageError('There is already a game of %s going on at the moment.' % util.bold(self.game.name))
@@ -205,15 +172,6 @@ class PlayingManager(IdleManager):
             traceback.print_exc(e)
             self.broadcast('An error occurred. The game was aborted.')
             self.abort()
-
-
-    def command_boo(self, info):
-        """
-        boo
-        boo
-        booooooooo
-        """
-        self.broadcst('i am scared')
 
 
 

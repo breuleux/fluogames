@@ -104,15 +104,13 @@ def blockify(message):
                 rval[-1] = line
     return '\n'.join(rval).strip()
 
-def prepjoin(l, prep = 'and', sep = ','):
-    prep = " %s " % prep
-    sep = "%s " % sep
+def prepjoin(l, prep = 'and', sep = ', '):
     if not l:
         return ""
     elif len(l) == 1:
         return l[0]
     else:
-        return prep.join(sep.join(l[:-1]), l[-1])
+        return "%s %s %s" % (sep.join(l[:-1]), prep, l[-1])
 
 def filter_command(s, prefixes):
     prefixes = prefixes.split(' ')
@@ -155,34 +153,70 @@ class Info(object):
         self.bot.notice(self.user, message, bold, underline, fg, bg)
 
     def clearance(self):
-        return self.bot.clearance(self.user)
-        #return max(self.bot.user_status.get(self.user, [0]))
+        try:
+            return self.manager.get_plugin('auth').clearance(self.user)
+        except KeyError:
+            return 0
 
-    
+
 def require_private(f):
-    f.require_private = True
-    return f
+    def newf(info, *args, **kwargs):
+        if not info.private:
+            raise UsageError('You must do this action in $Bprivate$B.')
+        return f(info, *args, **kwargs)
+    newf.__doc__ = f.__doc__
+    newf.restrictions = list(getattr(f, 'restrictions', []))
+    newf.restrictions.append('must be done in $Bprivate$B')
+    return newf
 
 def require_public(f):
-    f.require_public = True
-    return f
+    def newf(info, *args, **kwargs):
+        if not info.public:
+            raise UsageError('You must do this action in $Bpublic$B.')
+        return f(info, *args, **kwargs)
+    newf.__doc__ = f.__doc__
+    newf.restrictions = list(getattr(f, 'restrictions', []))
+    newf.restrictions.append('must be done in $Bpublic$B')
+    return newf
 
 def restrict(n):
     def deco(f):
-        f.clearance = n
-        return f
+        def newf(info, *args, **kwargs):
+            i = info.clearance()
+            if i < n:
+                raise UsageError('You do not have the permission to use this command (your level: %s; required level: %s).' % (i, n))
+            return f(info, *args, **kwargs)
+        newf.__doc__ = f.__doc__
+        newf.restrictions = list(getattr(f, 'restrictions', []))
+        newf.restrictions.append('requires clearance $B>= %s$B' % n)
+        return newf
     return deco
+        
+    
+# def require_private(f):
+#     f.require_private = True
+#     return f
 
-def requirement_check(fn, info, reply = False):
-    if getattr(fn, 'require_private', False) and info.public:
-        if reply: info.reply('You must do this action in private.')
-    elif getattr(fn, 'require_public', False) and info.private:
-        if reply: info.reply('You must do this action in public.')
-    elif getattr(fn, 'clearance', False) and info.clearance() < fn.clearance:
-        if reply: info.reply('You do not have the permission to use this command.')
-    else:
-        return True
-    return False
+# def require_public(f):
+#     f.require_public = True
+#     return f
+
+# def restrict(n):
+#     def deco(f):
+#         f.clearance = n
+#         return f
+#     return deco
+
+# def requirement_check(fn, info, reply = False):
+#     if getattr(fn, 'require_private', False) and info.public:
+#         if reply: info.reply('You must do this action in private.')
+#     elif getattr(fn, 'require_public', False) and info.private:
+#         if reply: info.reply('You must do this action in public.')
+#     elif getattr(fn, 'clearance', False) and info.clearance() < fn.clearance:
+#         if reply: info.reply('You do not have the permission to use this command.')
+#     else:
+#         return True
+#     return False
 
 
 def parent_function():
@@ -197,14 +231,16 @@ def get_help_for(name, x, *subtopics):
         answer = [blockify(x.__doc__)]
     else:
         answer = ["There is no documentation for %s." % name]
-    rpub = getattr(x, 'require_public', False)
-    rpriv = getattr(x, 'require_private', False)
-    rclear = getattr(x, 'clearance', 0)
-    if rpub or rpriv or rclear:
-        restrictions = []
-        if rpub: restrictions.append('must be done in $Bpublic$B')
-        if rpriv: restrictions.append('must be done in $Bprivate$B')
-        if rclear: restrictions.append('requires clearance $B>=%s$B' % rclear)
+#     rpub = getattr(x, 'require_public', False)
+#     rpriv = getattr(x, 'require_private', False)
+#     rclear = getattr(x, 'clearance', 0)
+#     if rpub or rpriv or rclear:
+#         restrictions = []
+#         if rpub: restrictions.append('must be done in $Bpublic$B')
+#         if rpriv: restrictions.append('must be done in $Bprivate$B')
+#         if rclear: restrictions.append('requires clearance $B>=%s$B' % rclear)
+    restrictions = getattr(x, 'restrictions', None)
+    if restrictions:
         answer.append("This command %s." % prepjoin(restrictions))
     return answer
 
@@ -279,20 +315,19 @@ class Plugin(Stateful):
         if fn is None:
             return False
         
-        if requirement_check(fn, info, reply = True):
-            try:
-                fn(info, *args)
-            except UsageError, e:
-                info.reply(e.message
-                           or blockify(fn.__doc__).split('\n')[0] # first line of fn.__doc__
-                           or 'There was an error executing %s' % command)
-            except TypeError, e:
-                if typeerror_regexp.match(e.message):
-                    line1 = blockify(fn.__doc__).split('\n')[0]
-                    info.reply(line1.startswith('Usage:') and line1
-                               or 'There was an error in the number of arguments while executing %s' % command)
-                else:
-                    raise
+        try:
+            fn(info, *args)
+        except UsageError, e:
+            info.reply(e.message
+                       or blockify(fn.__doc__).split('\n')[0] # first line of fn.__doc__
+                       or 'There was an error executing %s' % command)
+        except TypeError, e:
+            if typeerror_regexp.match(e.message):
+                line1 = blockify(fn.__doc__).split('\n')[0]
+                info.reply(line1.startswith('Usage:') and line1
+                           or 'There was an error in the number of arguments while executing %s' % command)
+            else:
+                raise
         return True
 
     def privmsg(self, info, message):
