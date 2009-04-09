@@ -11,6 +11,10 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
+   plugintut
+   gametut
+   LICENSE
+
 Indices and tables
 ==================
 
