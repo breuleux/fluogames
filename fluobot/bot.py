@@ -14,10 +14,6 @@ class FluoBot(irc.IRCClient):
 
     def make_manager(self, reload = False):
         self.manager = manager.IdleManager('manager', self, os.path.join(self.conf['root'], 'data'), self.conf, reload = reload)
-#         self.manager.add_game('witty', 'fluogames', 'witty', 'Witty')
-#         self.manager.add_game('countdown', 'fluogames', 'misc', 'Countdown')
-#         #self.manager.add_game('mafia', 'mafia', 'Mafia')
-#         #self.manager.add_game('operator', 'operator', 'Operator')
 
     def connectionMade(self):
         print "Connection made."
@@ -88,20 +84,8 @@ class FluoBot(irc.IRCClient):
                     self.user_status[arg.lower()].append(maps[mode])
                 else:
                     self.user_status[arg.lower()].remove(maps[mode])
-
-#     def reload_fluo(self):
-#         global fluogames
-#         if dreload is None:
-#             return False
-#         fluogames = dreload(fluogames, exclude=['fluogames.main', 'sys', '__builtin__', '__main__'])
-#         self.make_manager()
         
     def privmsg(self, user, channel, msg):
-#         if msg == '!fluoreload' and self.user_status.get(user.split('!')[0], 0) >= 3:
-#             if reload_fluo():
-#                 self.broadcast('reloaded fluogames')
-#             else:
-#                 self.broadcast('could not reload fluogames')
         self.manager.privmsg(util.Info(self, user, channel), msg)
 
     def broadcast(self, message, bold = False, underline = False, fg = False, bg = False):
@@ -174,15 +158,6 @@ def start(conf):
     t2 = task.LoopingCall(f.tick10)
     t2.start(0.1)
     reactor.run()
-    
-
-
-# if __name__ == '__main__':
-#     f = FluoBotFactory(sys.argv[1], sys.argv[2], sys.argv[3], db_dir = os.path.join('..', 'db'))
-#     reactor.connectTCP("irc.dejatoons.net", 6667, f)
-#     l = task.LoopingCall(f.tick)
-#     l.start(1.0)
-#     reactor.run()
 
 
 

@@ -1,5 +1,6 @@
 
 from fluobot.util import ManagedPlugin, bold, UsageError
+import traceback
 
 
 class Admin(ManagedPlugin):
@@ -32,27 +33,31 @@ class Admin(ManagedPlugin):
         game is aborted. If used with an argument, reloads the
         specified plugin.
         """
-        
-        if plugin is None:
-            # reload everything completely
-            self.bot.make_manager(reload = True)
-            # this and the rest will get garbage collected
-            info.reply("Reloaded everything.")
-            return
 
         try:
-            module, enabled, integrated, prioritary, inst = self.manager.plugins_map[plugin]
-        except KeyError:
-            raise UsageError('Plugin %s does not exist.' % plugin)
+            if plugin is None:
+                # reload everything completely
+                self.bot.make_manager(reload = True)
+                # this and the rest will get garbage collected
+                info.reply("Reloaded everything.")
+                return
 
-        del self.manager.plugins_map[plugin]
-        if prioritary:
-            self.manager.prioritary_plugins.remove(inst)
-        else:
-            self.manager.plugins.remove(inst)
-        self.manager.add_plugin((plugin, module, enabled, integrated, prioritary), reload = True)
+            try:
+                module, enabled, integrated, prioritary, inst = self.manager.plugins_map[plugin]
+            except KeyError:
+                raise UsageError('Plugin %s does not exist.' % plugin)
 
-        info.reply("Reloaded %s." % plugin)
+            del self.manager.plugins_map[plugin]
+            if prioritary:
+                self.manager.prioritary_plugins.remove(inst)
+            else:
+                self.manager.plugins.remove(inst)
+            self.manager.add_plugin((plugin, module, enabled, integrated, prioritary), reload = True)
+
+            info.reply("Reloaded %s." % plugin)
+        except Exception, e:
+            traceback.print_exc(e)
+            info.reply("There was an error during reloading: %s" % e)
 
 
 __fluostart__ = Admin
