@@ -18,7 +18,10 @@ from __future__ import with_statement
 import sys
 import os
 from fluobot.bot import start, configurator, conf_defaults
-
+from fluobot import util
+import urllib
+import zipfile
+import StringIO
 
 def prompt_conf():
 
@@ -38,9 +41,7 @@ def prompt_conf():
                                 'channel',
                                 'nickname',
                                 'nickpass',
-                                'nicksuffix',
                                 'reconnect',
-                                'autoghost',
                                 'public_prefix',
                                 'private_prefix',
                                 'auth'],
@@ -90,7 +91,7 @@ if autoload_plugins:
 """
 
         for game in games:
-            print >>f, 'plugins.append(%s)' % game
+            print >>f, 'plugins.append(%s)' % str(game)
         
 
 
@@ -124,12 +125,12 @@ def add_games(d):
             print 'Cannot install %s: module does not have a __fluostart__ attribute or it is set to False.' % game
             continue
         
-        print "> What name do you want to give the game? [%s]" % getattr(module, '__fluoname__', game),
+        print "> What name do you want to give the game? [%s]" % getattr(module, '__fluoname__', game.split('.')[-1]),
         name = raw_input()
         if not name:
             name = game
 
-        dir = os.path.join(root, 'plugins', name)
+        dir = os.path.join(root, 'data', name)
         try:
             os.makedirs(dir)
         except IOError:
@@ -137,8 +138,8 @@ def add_games(d):
 
         print "You may initialize the game's settings and populate it with"
         print "data if applicable. You may enter an url or a path containing"
-        print "the initial contents of the game's workspace or 'clean' if"
-        print "you want to start with a clean state."
+        print "the initial contents of the game's workspace as a zip file or"
+        print " 'clean' if you want to start with a clean state."
         print "> How do you want to initialize %s? [clean]" % name,
         loc = raw_input()
         if not loc:
@@ -148,11 +149,24 @@ def add_games(d):
             if loc != 'clean':
                 if loc.startswith('http://'):
                     # copy from url
-                    raise NotImplementedError()
+                    # change this to use ZipFile.extractall when we require python >=2.6
+                    z = zipfile.ZipFile(StringIO.StringIO(urllib.urlopen(loc).read()))
+                    l = z.namelist()
+                    l.sort(key = len)
+                    with util.indir(dir):
+                        for filename in l:
+                            dest = filename.split('/', 1)[-1]
+                            if not dest: continue
+                            print 'extracting', os.path.join(dir, dest)
+                            if filename.endswith('/'):
+                                os.makedirs(dest)
+                            else:
+                                with open(dest, 'w') as destf:
+                                    destf.write(z.read(filename))
                 else:
                     loc = os.path.realpath(os.path.expanduser(loc))
                     shutil.copytree(loc, dir, symlinks = True)
-            games.append((name, game, True, False))
+            games.append((name, game, True, False, False))
         except Exception, e:
             print 'remove', dir
             #shutil.rmtree(dir)
