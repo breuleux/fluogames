@@ -20,7 +20,7 @@ class Info(object):
 
     def clearance(self):
         try:
-            return self.manager.get_plugin('auth').clearance(self.user)
+            return self.bot.manager.get_plugin('auth').clearance(self.user)
         except KeyError:
             return 0
 

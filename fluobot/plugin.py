@@ -23,21 +23,27 @@ class inphase(object):
         self.obj.switch(self.curphase, switch_in = False, switch_out = False)
 
 
+def autoparse(f):
+    def newf(self, info, *args):
+        args = parse(args)
+        return f(self, info, *args)
+    return newf
+
 def require_private(f):
-    def newf(info, *args, **kwargs):
+    def newf(self, info, *args, **kwargs):
         if not info.private:
             raise UsageError('You must do this action in $Bprivate$B.')
-        return f(info, *args, **kwargs)
+        return f(self, info, *args, **kwargs)
     newf.__doc__ = f.__doc__
     newf.restrictions = list(getattr(f, 'restrictions', []))
     newf.restrictions.append('must be done in $Bprivate$B')
     return newf
 
 def require_public(f):
-    def newf(info, *args, **kwargs):
+    def newf(self, info, *args, **kwargs):
         if not info.public:
             raise UsageError('You must do this action in $Bpublic$B.')
-        return f(info, *args, **kwargs)
+        return f(self, info, *args, **kwargs)
     newf.__doc__ = f.__doc__
     newf.restrictions = list(getattr(f, 'restrictions', []))
     newf.restrictions.append('must be done in $Bpublic$B')
@@ -45,11 +51,11 @@ def require_public(f):
 
 def restrict(n):
     def deco(f):
-        def newf(info, *args, **kwargs):
+        def newf(self, info, *args, **kwargs):
             i = info.clearance()
             if i < n:
                 raise UsageError('You do not have the permission to use this command (your level: %s; required level: %s).' % (i, n))
-            return f(info, *args, **kwargs)
+            return f(self, info, *args, **kwargs)
         newf.__doc__ = f.__doc__
         newf.restrictions = list(getattr(f, 'restrictions', []))
         newf.restrictions.append('requires clearance $B>= %s$B' % n)
@@ -169,8 +175,8 @@ class StandardPlugin(Plugin):
         message = filter_command(message,
                                  self.bot.conf['public_prefix' if info.public
                                                else 'private_prefix'])
-        if message: 
-            message = parse(message)
+        if message:
+            message = message.split() #parse(message)
             command, args = message[0], message[1:]
             if self.do_command(info, command, args):
                 return

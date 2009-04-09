@@ -31,11 +31,10 @@ class IdleManager(ManagerPhases, plugin.StandardPlugin):
         if self.game:
             self.prioritary_plugins.remove(self.game)
             self.game.integrated = False
+            self.game.enabled = True
             self.game = None
 
     def add_plugin(self, (name, module_name, enabled, integrated, prioritary), reload = False):
-        if not enabled:
-            return
         module = util.resolve(module_name, reload = reload)
         loc = os.path.join(self.loc, name)
         try:
@@ -46,6 +45,7 @@ class IdleManager(ManagerPhases, plugin.StandardPlugin):
         with util.indir(loc):
             inst = cls(self, name, loc)
         inst.integrated = integrated
+        inst.enabled = enabled
         if prioritary:
             self.prioritary_plugins.append(inst)
         else:
@@ -59,7 +59,7 @@ class IdleManager(ManagerPhases, plugin.StandardPlugin):
         list = []
         for plugin in self.prioritary_plugins + self.plugins:
             list.append(plugin)
-            if getattr(plugin, 'catchall_public', False):
+            if plugin.enabled and getattr(plugin, 'catchall_public', False):
                 break
         return list
     
@@ -67,7 +67,7 @@ class IdleManager(ManagerPhases, plugin.StandardPlugin):
         list = []
         for plugin in self.prioritary_plugins + self.plugins:
             list.append(plugin)
-            if getattr(plugin, 'catchall_private', False):
+            if plugin.enabled and getattr(plugin, 'catchall_private', False):
                 break
         return list
 
@@ -86,6 +86,8 @@ class IdleManager(ManagerPhases, plugin.StandardPlugin):
                    else (pubp if pub or len(pubp) > len(privp)
                          else privp))
         for plugin in plugins:
+            if not plugin.enabled:
+                continue
             if plugin.integrated:
                 commands = dict(plugin.get_commands(), **commands)
             elif plugin.name not in commands and callable(plugin):
@@ -110,10 +112,12 @@ class IdleManager(ManagerPhases, plugin.StandardPlugin):
         privp = self.priv_plugins()
         if info.public \
                 and pubp \
+                and pubp[-1].enabled \
                 and getattr(pubp[-1], 'catchall_public', False):
             pubp[-1].privmsg(info, message)
         elif info.private \
                 and privp \
+                and privp[-1].enabled \
                 and getattr(privp[-1], 'catchall_private', False):
             privp[-1].privmsg(info, message)
 

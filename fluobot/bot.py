@@ -100,6 +100,8 @@ class FluoBot(irc.IRCClient):
             for m in message:
                 self.msg(user, m, bold, underline, fg, bg)
             return
+        else:
+            message = str(message)
         message = format.format(message, bold, underline, fg, bg)
         for m in message.split('\n'):
             if m:
@@ -110,6 +112,8 @@ class FluoBot(irc.IRCClient):
             for m in message:
                 self.notice(user, m, bold, underline, fg, bg)
             return
+        else:
+            message = str(message)
         message = format.format(message, bold, underline, fg, bg)
         for m in message.split('\n'):
             if m:

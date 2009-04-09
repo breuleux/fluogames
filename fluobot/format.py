@@ -3,6 +3,8 @@
 def format(message, bold = False, underline = False, fg = False, bg = False, color = False):
     if isinstance(message, (list, tuple)):
         return [format(m, bold, underline, fg, bg) for m in message]
+    else:
+        message = str(message)
     color = str(fg) if fg is not False else ''
     if bg is not False: color += ',%s' % bg
     if bold:
@@ -24,10 +26,12 @@ def underline(message):
     return format(message, underline = True)
 
 def strip(message):
+    message = str(message)
     message = message.split('\n')
     return '\n'.join(map(str.strip, message))
 
 def blockify(message):
+    message = str(message)
     if not message:
         return ""
     rval = []
@@ -58,8 +62,7 @@ def filter_command(s, prefixes):
             return s[len(prefix):]
     return None
 
-def parse(message):
-    message = message.split()
+def parse(args):
     def convert(s):
         for fn in (int, float):
             try:
@@ -67,5 +70,5 @@ def parse(message):
             except:
                 pass
         return s
-    return map(convert, message)
+    return map(convert, args)
 

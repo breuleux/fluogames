@@ -2,15 +2,17 @@
 from fluobot.format import bold
 from fluobot.util import UsageError
 from fluobot.plugin import ManagedPlugin
+from fluobot import plugin
 import traceback
 
 
 class Admin(ManagedPlugin):
     """
-    Administrative tools for fluobot. Contains the $Badmin$B and
-    $Breload$B commands.
+    Administrative tools for fluobot. Contains the $Badmin$B,
+    $Breload$B, $Benable$B and $Bdisable$B commands.
     """
     
+    @plugin.restrict(1)
     def command_abort(self, info):
         """
         Usage: $B!abort$B
@@ -27,6 +29,7 @@ class Admin(ManagedPlugin):
         self.manager.abort()
         self.broadcast('Aborted %s game on request from %s.' % (bold(game_name), bold(info.user)))
 
+    @plugin.restrict(3)
     def command_reload(self, info, plugin = None):
         """
         Usage: $B!reload$B or $B!reload <plugin>$B
@@ -61,6 +64,39 @@ class Admin(ManagedPlugin):
         except Exception, e:
             traceback.print_exc(e)
             info.reply("There was an error during reloading: %s" % e)
+
+    @plugin.restrict(3)
+    def command_enable(self, info, plugin):
+        """
+        Usage: $B!enable <plugin>$B
+
+        Enables the specified plugin. This is not persistent:
+        enabling/disabling a plugin will only last until reloading or
+        rebooting the bot.
+        """
+
+        try:
+            self.manager.get_plugin(plugin).enabled = True
+            self.broadcast('%s is enabled.' % plugin)
+        except KeyError:
+            raise UsageError('Plugin %s does not exist.' % plugin)
+
+    @plugin.restrict(3)
+    def command_disable(self, info, plugin):
+        """
+        Usage: $B!disable <plugin>$B
+
+        Disables the specified plugin. This is not persistent:
+        enabling/disabling a plugin will only last until reloading or
+        rebooting the bot.
+        """
+
+        try:
+            self.manager.get_plugin(plugin).enabled = False
+            self.broadcast('%s is disabled.' % plugin)
+        except KeyError:
+            raise UsageError('Plugin %s does not exist.' % plugin)
+
 
 
 __fluostart__ = Admin
