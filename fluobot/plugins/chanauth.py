@@ -1,5 +1,5 @@
 
-from fluobot.util import ManagedPlugin, bold, UsageError
+from fluobot.plugin import ManagedPlugin
 
 
 class ChanAuth(ManagedPlugin):

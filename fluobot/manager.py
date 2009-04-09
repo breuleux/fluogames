@@ -2,6 +2,8 @@ from __future__ import with_statement
 
 import os
 import util
+import format
+import plugin
 import traceback
  
 
@@ -13,7 +15,7 @@ class ManagerPhases:
                     playing = PlayingManager)
 
 
-class IdleManager(ManagerPhases, util.StandardPlugin):
+class IdleManager(ManagerPhases, plugin.StandardPlugin):
 
     def __init__(self, name, bot, loc, conf, reload = False):
         super(IdleManager, self).__init__(name, bot, loc)
@@ -125,7 +127,7 @@ class PlayingManager(IdleManager):
             self.prioritary_plugins.append(self.game)
 
     def start(self, game):
-        raise util.UsageError('There is already a game of %s going on at the moment.' % util.bold(self.game.name))
+        raise util.UsageError('There is already a game of %s going on at the moment.' % format.bold(self.game.name))
 
     def abort(self):
         try:

@@ -8,10 +8,14 @@ import os
 
 import util
 import manager
-
+from info import Info
+import format
 
 class FluoBot(irc.IRCClient):
 
+    def reload_conf(self):
+        self.conf = configurator.load(self.conf['root'])
+    
     def make_manager(self, reload = False):
         self.manager = manager.IdleManager('manager', self, os.path.join(self.conf['root'], 'data'), self.conf, reload = reload)
 
@@ -86,7 +90,7 @@ class FluoBot(irc.IRCClient):
                     self.user_status[arg.lower()].remove(maps[mode])
         
     def privmsg(self, user, channel, msg):
-        self.manager.privmsg(util.Info(self, user, channel), msg)
+        self.manager.privmsg(Info(self, user, channel), msg)
 
     def broadcast(self, message, bold = False, underline = False, fg = False, bg = False):
         self.msg(self.channel, message, bold, underline, fg, bg)
@@ -96,7 +100,7 @@ class FluoBot(irc.IRCClient):
             for m in message:
                 self.msg(user, m, bold, underline, fg, bg)
             return
-        message = util.format(message, bold, underline, fg, bg)
+        message = format.format(message, bold, underline, fg, bg)
         for m in message.split('\n'):
             if m:
                 irc.IRCClient.msg(self, user, m)
@@ -106,7 +110,7 @@ class FluoBot(irc.IRCClient):
             for m in message:
                 self.notice(user, m, bold, underline, fg, bg)
             return
-        message = util.format(message, bold, underline, fg, bg)
+        message = format.format(message, bold, underline, fg, bg)
         for m in message.split('\n'):
             if m:
                 irc.IRCClient.notice(self, user, m)

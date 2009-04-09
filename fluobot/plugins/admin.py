@@ -1,5 +1,7 @@
 
-from fluobot.util import ManagedPlugin, bold, UsageError
+from fluobot.format import bold
+from fluobot.util import UsageError
+from fluobot.plugin import ManagedPlugin
 import traceback
 
 
@@ -37,6 +39,7 @@ class Admin(ManagedPlugin):
         try:
             if plugin is None:
                 # reload everything completely
+                self.bot.reload_conf()
                 self.bot.make_manager(reload = True)
                 # this and the rest will get garbage collected
                 info.reply("Reloaded everything.")
