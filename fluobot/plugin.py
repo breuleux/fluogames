@@ -52,7 +52,7 @@ def require_public(f):
 def restrict(n):
     def deco(f):
         def newf(self, info, *args, **kwargs):
-            i = info.clearance()
+            i = info.user.clearance
             if i < n:
                 raise UsageError('You do not have the permission to use this command (your level: %s; required level: %s).' % (i, n))
             return f(self, info, *args, **kwargs)
@@ -136,8 +136,26 @@ class Plugin(Stateful):
                 raise
         return True
 
-    def privmsg(self, info, message):
-        raise NotImplementedError("Override privmsg")
+    def on_privmsg(self, info, message):
+        raise NotImplementedError("Override on_privmsg")
+
+    def watch(self, info, message):
+        pass
+
+    def on_join(self, info):
+        pass
+
+    def on_nick_change(self, oldnick, newnick):
+        pass
+
+    def on_kick(self, kicker_info, kicked_nick, message):
+        pass
+
+    def on_part(self, info, message):
+        pass
+
+    def on_quit(self, quitter, message):
+        pass
 
     def exec_in_phase(self, phase, fn_name, *args):
         curcls = self.__class__
@@ -170,7 +188,7 @@ class StandardPlugin(Plugin):
         return fn
 
     
-    def privmsg(self, info, message):
+    def on_privmsg(self, info, message):
         orig = message
         message = filter_command(message,
                                  self.bot.conf['public_prefix' if info.public
@@ -180,9 +198,9 @@ class StandardPlugin(Plugin):
             command, args = message[0], message[1:]
             if self.do_command(info, command, args):
                 return
-        self.privmsg_rest(info, orig)
+        self.on_privmsg_rest(info, orig)
         
-    def privmsg_rest(self, info, message):
+    def on_privmsg_rest(self, info, message):
         pass
 
     
@@ -276,7 +294,11 @@ class ManagedPlugin(StandardPlugin):
         super(ManagedPlugin, self).__init__(name, manager.bot, loc)
         self.manager = manager
         self._orig_phase = self.__class__
+        self.setup()
 
+    def setup(self):
+        pass
+    
     def reset(self):
         self.switch(self._orig_phase)
         

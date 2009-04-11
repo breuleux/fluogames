@@ -53,11 +53,7 @@ class Admin(ManagedPlugin):
             except KeyError:
                 raise UsageError('Plugin %s does not exist.' % plugin)
 
-            del self.manager.plugins_map[plugin]
-            if prioritary:
-                self.manager.prioritary_plugins.remove(inst)
-            else:
-                self.manager.plugins.remove(inst)
+            self.manager.remove_plugin(plugin)
             self.manager.add_plugin((plugin, module, enabled, integrated, prioritary), reload = True)
 
             info.reply("Reloaded %s." % plugin)

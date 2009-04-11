@@ -22,7 +22,7 @@ class IdleManager(ManagerPhases, plugin.StandardPlugin):
         self.conf = conf
         self.prioritary_plugins = []
         self.plugins_map = {}
-        self.plugins = []
+        self.normal_plugins = []
         self.game = None
         for plugin in conf['plugins']:
             self.add_plugin(plugin, reload = reload)
@@ -49,15 +49,30 @@ class IdleManager(ManagerPhases, plugin.StandardPlugin):
         if prioritary:
             self.prioritary_plugins.append(inst)
         else:
-            self.plugins.append(inst)
+            self.normal_plugins.append(inst)
         self.plugins_map[name] = (module_name, enabled, integrated, prioritary, inst)
+
+    def remove_plugin(self, plugin):
+        try:
+            module, enabled, integrated, prioritary, inst = self.plugins_map[plugin]
+        except KeyError:
+            return False
+        del self.plugins_map[plugin]
+        if prioritary:
+            self.prioritary_plugins.remove(inst)
+        else:
+            self.normal_plugins.remove(inst)
+        return True
 
     def get_plugin(self, name):
         return self.plugins_map[name][-1]
 
+    def plugins(self):
+        return self.prioritary_plugins + self.normal_plugins
+    
     def pub_plugins(self):
         list = []
-        for plugin in self.prioritary_plugins + self.plugins:
+        for plugin in self.plugins():
             list.append(plugin)
             if plugin.enabled and getattr(plugin, 'catchall_public', False):
                 break
@@ -65,7 +80,7 @@ class IdleManager(ManagerPhases, plugin.StandardPlugin):
     
     def priv_plugins(self):
         list = []
-        for plugin in self.prioritary_plugins + self.plugins:
+        for plugin in self.plugins():
             list.append(plugin)
             if plugin.enabled and getattr(plugin, 'catchall_private', False):
                 break
@@ -101,26 +116,41 @@ class IdleManager(ManagerPhases, plugin.StandardPlugin):
         fn = self.get_command(command, info.public, info.private)
         return super(IdleManager, self).do_command(info, fn, args)
 
-    def privmsg(self, info, message):
-        for plugin in self.prioritary_plugins + self.plugins:
-            if hasattr(plugin, 'watch'):
-                plugin.watch(info, message)
-        super(IdleManager, self).privmsg(info, message)
+    def on_privmsg(self, info, message):
+        for plugin in self.plugins():
+            plugin.watch(info, message)
+        super(IdleManager, self).on_privmsg(info, message)
             
-    def privmsg_rest(self, info, message):
+    def on_privmsg_rest(self, info, message):
         pubp = self.pub_plugins()
         privp = self.priv_plugins()
         if info.public \
                 and pubp \
                 and pubp[-1].enabled \
                 and getattr(pubp[-1], 'catchall_public', False):
-            pubp[-1].privmsg(info, message)
+            pubp[-1].on_privmsg(info, message)
         elif info.private \
                 and privp \
                 and privp[-1].enabled \
                 and getattr(privp[-1], 'catchall_private', False):
-            privp[-1].privmsg(info, message)
+            privp[-1].on_privmsg(info, message)
 
+    def on_join(info):
+        for plugin in self.plugins():
+            plugin.on_join(info, message)
+
+    def on_nick_change(oldnick, newnick):
+        for plugin in self.plugins():
+            plugin.on_nick_change(info, message)
+
+#     def on_kick(self, kicker_info, kicked_nick, message):
+#         pass
+
+#     def on_part(self, info, message):
+#         pass
+
+#     def on_quit(self, quitter, message):
+#         pass
 
 
 class PlayingManager(IdleManager):

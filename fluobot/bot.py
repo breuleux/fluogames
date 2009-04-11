@@ -8,13 +8,24 @@ import os
 
 import util
 import manager
-from info import Info
+from info import Info, User
 import format
 
 class FluoBot(irc.IRCClient):
 
     def reload_conf(self):
         self.conf = configurator.load(self.conf['root'])
+
+    def clearance(self, user):
+        return 0
+        
+    def make_user(self, nickname):
+        try:
+            u = User(nickname)
+            u.clearance = 0
+        except:
+            u = None
+        return u
     
     def make_manager(self, reload = False):
         self.manager = manager.IdleManager('manager', self, os.path.join(self.conf['root'], 'data'), self.conf, reload = reload)
@@ -33,7 +44,6 @@ class FluoBot(irc.IRCClient):
         irc.IRCClient.connectionMade(self)
         if not hasattr(self, 'manager'):
             self.make_manager()
-        self.user_status = {}
 
     def connectionLost(self, reason):
         print "Connection lost."
@@ -49,48 +59,12 @@ class FluoBot(irc.IRCClient):
     def signedOn(self):
         self.msg('NickServ', 'identify %s' % self.nickpass)
         self.join(self.channel)
-        
-    def joined(self, channel):
-        self.user_status = {}
-        self.sendLine("NAMES %s" % channel)
 
     def kickedFrom(self, channel, kicker, message):
         self.join(channel)
-
-    def irc_RPL_NAMREPLY(self, prefix, params):
-        for name in params[3].split():
-            pfx = ['+', '%', '@']
-            perms = [0]
-            while name[0] in pfx:
-                perms.append(pfx.index(name[0]) + 1)
-                name = name[1:]
-            self.user_status[name.lower()] = perms
-
-    def userJoined(self, user, channel):
-        self.user_status[user.split('!', 1)[0].lower()] = [0]
-
-    def userRenamed(self, oldname, newname):
-        self.user_status[newname] = self.user_status[oldname.lower()]
-        del self.user_status[oldname.lower()]
-    
-    def modeChanged(self, user, channel, set, modes, args):
-        changes = []
-        adding = set
-        for c in modes:
-            if c == '+': adding = True
-            elif c == '-': adding = False
-            else: changes.append((c, adding))
-        changes = changes[-len(args):]
-        for (mode, adding), arg in zip(changes, args):
-            maps = dict(q=5, a=4, o=3, h=2, v=1)
-            if mode in maps:
-                if adding:
-                    self.user_status[arg.lower()].append(maps[mode])
-                else:
-                    self.user_status[arg.lower()].remove(maps[mode])
         
     def privmsg(self, user, channel, msg):
-        self.manager.privmsg(Info(self, user, channel), msg)
+        self.manager.on_privmsg(Info(self, self.make_user(user), channel), msg)
 
     def broadcast(self, message, bold = False, underline = False, fg = False, bg = False):
         self.msg(self.channel, message, bold, underline, fg, bg)
@@ -126,13 +100,74 @@ class FluoBot(irc.IRCClient):
         self.manager.tick10()
 
 
+class ChanAuthFluoBot(FluoBot):
+
+    def clearance(self, user):
+        return self.make_user(user).clearance
+        
+    def make_user(self, nickname):
+        if isinstance(nickname, User):
+            return nickname
+        try:
+            u = User(nickname)
+            u.clearance = max(self.user_status.get(u.nick.lower(), [0]))
+        except Exception, e:
+            u = None
+        return u
+
+    def connectionMade(self):
+        FluoBot.connectionMade(self)
+        self.user_status = {}
+        
+    def joined(self, channel):
+        FluoBot.joined(self, channel)
+        self.user_status = {}
+        self.sendLine("NAMES %s" % channel)
+
+    def irc_RPL_NAMREPLY(self, prefix, params):
+        #FluoBot.irc_RPL_NAMREPLY(self, prefix, params)
+        for name in params[3].split():
+            pfx = ['+', '%', '@']
+            perms = [0]
+            while name[0] in pfx:
+                perms.append(pfx.index(name[0]) + 1)
+                name = name[1:]
+            self.user_status[name.lower()] = perms
+
+    def userJoined(self, user, channel):
+        FluoBot.userJoined(self, user, channel)
+        self.user_status[user.split('!', 1)[0].lower()] = [0]
+
+    def userRenamed(self, oldname, newname):
+        FluoBot.userRenamed(self, oldname, newname)
+        self.user_status[newname.lower()] = self.user_status[oldname.lower()]
+        del self.user_status[oldname.lower()]
+
+    def modeChanged(self, user, channel, set, modes, args):
+        FluoBot.modeChanged(self, user, channel, set, modes, args)
+        changes = []
+        adding = set
+        for c in modes:
+            if c == '+': adding = True
+            elif c == '-': adding = False
+            else: changes.append((c, adding))
+        changes = changes[-len(args):]
+        for (mode, adding), arg in zip(changes, args):
+            maps = dict(q=5, a=4, o=3, h=2, v=1)
+            if mode in maps:
+                if adding:
+                    self.user_status[arg.lower()].append(maps[mode])
+                else:
+                    self.user_status[arg.lower()].remove(maps[mode])
+
+
 
 class FluoBotFactory(protocol.ClientFactory):
-    protocol = FluoBot
 
     def __init__(self, conf):
         self.bots = []
         self.conf = conf
+        self.protocol = util.resolve(conf['protocol'])
 
     def clientConnectionLost(self, connector, reason):
         if self.conf['reconnect']:

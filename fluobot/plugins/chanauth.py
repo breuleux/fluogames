@@ -24,10 +24,12 @@ class ChanAuth(ManagedPlugin):
         issued the command.
         """
         user = user or info.user
-        info.reply('%s has clearance level %s' % (user, self.clearance(user)))
+        #info.reply('%s has clearance level %s' % (user, self.clearance(user)))
+        info.reply('%s has clearance level %s' % (user, self.bot.clearance(user)))
 
-    def clearance(self, user):
-        return max(self.bot.user_status.get(user.lower(), [0]))
+#     def clearance(self, user):
+#         return user.clearance
+#         return max(self.bot.user_status.get(user.lower(), [0]))
 
 
 __fluostart__ = ChanAuth
