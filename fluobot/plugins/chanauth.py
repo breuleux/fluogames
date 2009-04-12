@@ -23,13 +23,11 @@ class ChanAuth(ManagedPlugin):
         is specified, returns the clearance level of the user who
         issued the command.
         """
-        user = user or info.user
-        #info.reply('%s has clearance level %s' % (user, self.clearance(user)))
-        info.reply('%s has clearance level %s' % (user, self.bot.clearance(user)))
-
-#     def clearance(self, user):
-#         return user.clearance
-#         return max(self.bot.user_status.get(user.lower(), [0]))
+        if user:
+            info.reply('%s has clearance level %s' % (user, self.bot.clearance(user)))
+        else:
+            info.reply('You have clearance level %s' % self.bot.clearance(info.user))
+        
 
 
 __fluostart__ = ChanAuth

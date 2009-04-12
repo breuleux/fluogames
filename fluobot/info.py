@@ -4,22 +4,26 @@
 class User(object):
 
     def __init__(self, raw_nick):
-        self.nick, self.host = raw_nick.split('!', 1)
+        if '!' in raw_nick:
+            self.nick, self.host = raw_nick.split('!', 1)
+        else:
+            self.nick, self.host = raw_nick, 'UNKNOWN'
 
-#     def __eq__(self, other):
-#         if isinstance(other, str):
-#             if other.lower() == self.nick.lower():
-#                 return True
-#         elif isinstance(other, User):
+    def __eq__(self, other):
+        if isinstance(other, str):
+            if other.lower() == self.nick.lower():
+                return True
+        elif isinstance(other, User):
+            return self.nick.lower() == other.nick.lower()
 #             return self is other
-# #             return self.host == other.host \
-# #                 and self.nick.lower() == other.nick.lower()
+#             return self.host == other.host \
+#                 and self.nick.lower() == other.nick.lower()
 
-#     def __ne__(self, other):
-#         return not self == other
+    def __ne__(self, other):
+        return not self == other
 
-#     def __hash__(self):
-#         return hash(self.nick.lower()) ^ hash(self.host)
+    def __hash__(self):
+        return hash(self.nick.lower()) # ^ hash(self.host)
 
     def __add__(self, other):
         return str(self) + other

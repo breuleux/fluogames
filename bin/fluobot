@@ -43,8 +43,7 @@ def prompt_conf():
                                 'nickpass',
                                 'reconnect',
                                 'public_prefix',
-                                'private_prefix',
-                                'auth'],
+                                'private_prefix'],
                            d)
 
     if not os.path.exists(root):
@@ -65,7 +64,7 @@ plugins = []
 # plugins.append(name, module, enabled, integrated, prioritary)
 plugins.append(('override', 'fluobot.plugins.admin', True, False, True))
 plugins.append(('admin', 'fluobot.plugins.admin', True, True, False))
-plugins.append(('auth', auth, True, True, False))
+plugins.append(('auth', 'fluobot.plugins.chanauth', True, True, False))
 
 import os
 import sys
