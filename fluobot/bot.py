@@ -54,15 +54,30 @@ class FluoBot(irc.IRCClient):
         self.factory.bots.remove(self)
         irc.IRCClient.connectionLost(self, reason)
 
-#     def lineReceived(self, line):
-#         print line
-#         irc.IRCClient.lineReceived(self, line)
+    def lineReceived(self, line):
+        print line
+        irc.IRCClient.lineReceived(self, line)
 
+    def irc_PONG(self, *args):
+        pass
+        
     # callbacks for events
 
     def signedOn(self):
+        if self.nickname != self.conf['nickname'] and self.conf['autoghost']:
+            self.msg('NickServ', 'ghost %s %s' % (self.conf['nickname'], self.conf['nickpass']))
         self.msg('NickServ', 'identify %s' % self.nickpass)
         self.join(self.channel)
+
+    def irc_NOTICE(self, prefix, params):
+        # Normally, after ghosting successfully, nickserv notices
+        # something back with the word 'ghost' in it. That's probably
+        # as generic as it can be :(
+        if prefix.split('!', 1)[0] == 'NickServ' \
+                and 'ghost' in params[1].lower() \
+                and self.nickname != self.conf['nickname']:
+            self.setNick(self.conf['nickname'])
+            self.msg('NickServ', 'identify %s' % self.nickpass)
 
     def kickedFrom(self, channel, kicker, message):
         self.join(channel)
@@ -143,57 +158,32 @@ class ChanAuthFluoBot(FluoBot):
                 continue
             self.user_status[name.lower()] = perms
 
-        print 'NAMES'
-        print '  st', self.user_status
-
     def userJoined(self, user, channel):
         FluoBot.userJoined(self, user, channel)
         u = self.make_user(user)
         nick = u.nick.lower()
         self.user_status[nick] = [0]
-        #self.user_status[user.split('!', 1)[0].lower()] = [0]
-        
-        print 'JOIN', user
-        print '  st', self.user_status
 
     def userKicked(self, kickee, channel, kicker, message):
         FluoBot.userKicked(self, kickee, channel, kicker, message)
         u = self.get_user(kickee)
         del self.user_status[u.nick.lower()]
-        print 'KICK', kickee
-        print '  st', self.user_status
         
     def userLeft(self, user, channel):
         FluoBot.userLeft(self, user, channel)
         u = self.get_user(user)
         del self.user_status[u.nick.lower()]
-        print 'PART', user
-        print '  st', self.user_status
 
     def userQuit(self, user, message):
         FluoBot.userQuit(self, user, message)
         u = self.get_user(user)
         del self.user_status[u.nick.lower()]
-        print 'QUIT', user
-        print '  st', self.user_status
 
     def userRenamed(self, oldname, newname):
         FluoBot.userRenamed(self, oldname, newname)
         oldname, newname = oldname.lower(), newname.lower()
         self.user_status[newname] = self.user_status[oldname]
         del self.user_status[oldname]
-        print 'RENAME %s -> %s' % (oldname, newname)
-        print '  st', self.user_status
-        
-#         u = self.get_user(oldname)
-#         u.nick = newname
-#         del self.users[oldname.lower()]
-#         self.users[newname.lower()] = u
-#         print 'use', self.users
-#         print 'ust', self.user_status
-        
-        #self.user_status[newname.lower()] = self.user_status[oldname.lower()]
-        #del self.user_status[oldname.lower()]
 
     def modeChanged(self, user, channel, set, modes, args):
         FluoBot.modeChanged(self, user, channel, set, modes, args)
@@ -214,8 +204,6 @@ class ChanAuthFluoBot(FluoBot):
                 else:
                     perms.remove(maps[mode])
                     #self.user_status[arg.lower()].remove(maps[mode])
-        print 'MODE', set, modes, args
-        print '  st', self.user_status
 
 
 
@@ -248,6 +236,10 @@ class FluoBotFactory(protocol.ClientFactory):
         for bot in self.bots:
             bot.tick10()
 
+    def keep_alive(self):
+        for bot in self.bots:
+            bot.sendLine('PING %s' % self.conf['network'])
+            #bot.ping(self.conf['network'], 'what')
 
 
 def start(conf):
@@ -257,6 +249,8 @@ def start(conf):
     t1.start(1.0)
     t2 = task.LoopingCall(f.tick10)
     t2.start(0.1)
+    t3 = task.LoopingCall(f.keep_alive)
+    t3.start(30.0)
     reactor.run()
 
 
@@ -316,11 +310,11 @@ the network again if it is disconnected."""
 loaded automatically."""
                              ),
     
-#     autoghost = BoolOption(description =
-# """If its nickname is taken and autoghost is True, the bot will
-# automatically try to ghost it (forcefully disconnect it) and change
-# back to its original nickname."""
-#                              ),
+    autoghost = BoolOption(description =
+"""If its nickname is taken and autoghost is True, the bot will
+automatically try to ghost it (forcefully disconnect it) and change
+back to its original nickname."""
+                             ),
 
     public_prefix = StringOption(description =
 """Default prefix for commands when entered in a channel. You can give
@@ -357,7 +351,7 @@ conf_defaults = dict(
     nickpass = "",
     #nicksuffix = '_',
     reconnect = 'y',
-    #autoghost = 'y',
+    autoghost = 'y',
     autoload_plugins = 'y',
     public_prefix = "!",
     private_prefix = "! ",
