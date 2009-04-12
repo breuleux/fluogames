@@ -26,6 +26,9 @@ class FluoBot(irc.IRCClient):
         except:
             u = None
         return u
+
+    def get_user(self, nickname):
+        return self.make_user(nickname)
     
     def make_manager(self, reload = False):
         self.manager = manager.IdleManager('manager', self, os.path.join(self.conf['root'], 'data'), self.conf, reload = reload)
@@ -41,6 +44,8 @@ class FluoBot(irc.IRCClient):
         self.nickname = self.conf['nickname']
         self.nickpass = self.conf['nickpass']
 
+        self.users_pool = {}
+        
         irc.IRCClient.connectionMade(self)
         if not hasattr(self, 'manager'):
             self.make_manager()
@@ -64,7 +69,7 @@ class FluoBot(irc.IRCClient):
         self.join(channel)
         
     def privmsg(self, user, channel, msg):
-        self.manager.on_privmsg(Info(self, self.make_user(user), channel), msg)
+        self.manager.on_privmsg(Info(self, self.get_user(user), channel), msg)
 
     def broadcast(self, message, bold = False, underline = False, fg = False, bg = False):
         self.msg(self.channel, message, bold, underline, fg, bg)
@@ -102,46 +107,111 @@ class FluoBot(irc.IRCClient):
 
 class ChanAuthFluoBot(FluoBot):
 
-    def clearance(self, user):
-        return self.make_user(user).clearance
-        
-    def make_user(self, nickname):
-        if isinstance(nickname, User):
-            return nickname
-        try:
-            u = User(nickname)
-            u.clearance = max(self.user_status.get(u.nick.lower(), [0]))
-        except Exception, e:
-            u = None
-        return u
 
     def connectionMade(self):
         FluoBot.connectionMade(self)
+        self.reset_users()
+
+    def reset_users(self):
+        self.users = {}
         self.user_status = {}
+
+    def get_user(self, user):
+        if isinstance(user, User):
+            return user
+        if '!' in user:
+            nick, host = user.split('!', 1)
+            u = self.users.get(nick.lower(), None)
+            if u and u.host == 'UNCHECKED':
+                u.host = host
+            return u
+        else:
+            return self.users.get(user.lower(), None)
+
+    def destroy_user(self, user):
+        u = self.get_user(user)
+        del self.users[u.nick.lower()]
+        del self.user_status[u]
+    
+    def clearance(self, user):
+        return self.get_user(user).clearance
+    
+#     def make_user(self, nickname):
+#         return 
+# #         if isinstance(nickname, User):
+# #             return nickname
+# #         try:
+# #             u = User(nickname)
+# #             u.clearance = max(self.user_status.get(u.nick.lower(), [0]))
+# #         except Exception, e:
+# #             u = None
+# #         return u
+
         
     def joined(self, channel):
         FluoBot.joined(self, channel)
-        self.user_status = {}
+        self.reset_users()
         self.sendLine("NAMES %s" % channel)
 
     def irc_RPL_NAMREPLY(self, prefix, params):
-        #FluoBot.irc_RPL_NAMREPLY(self, prefix, params)
         for name in params[3].split():
-            pfx = ['+', '%', '@']
+            pfx = ['+', '%', '@', '&', '~']
             perms = [0]
             while name[0] in pfx:
                 perms.append(pfx.index(name[0]) + 1)
                 name = name[1:]
-            self.user_status[name.lower()] = perms
+            if name == self.nickname:
+                continue
+            u = self.make_user(name + '!UNCHECKED')
+            u.clearance = max(perms)
+            self.users[name.lower()] = u
+            self.user_status[u] = perms
+        print 'use', self.users
+        print 'ust', self.user_status
 
-    def userJoined(self, user, channel):
-        FluoBot.userJoined(self, user, channel)
-        self.user_status[user.split('!', 1)[0].lower()] = [0]
+    def irc_JOIN(self, user, channel):
+        #FluoBot.userJoined(self, user, channel)
+        print 'join:', user
+        u = self.make_user(user)
+        u.clearance = 0
+        self.users[u.nick.lower()] = u
+        self.user_status[u] = [0]
+        #self.user_status[user.split('!', 1)[0].lower()] = [0]
+        print 'use', self.users
+        print 'ust', self.user_status
+
+    def userKicked(self, kickee, channel, kicker, message):
+        FluoBot.userKicked(self, kickee, channel, kicker, message)
+        print 'kicked:', kickee
+        self.destroy_user(kickee)
+        print 'use', self.users
+        print 'ust', self.user_status
+        
+    def irc_PART(self, user, channel):
+        print 'left:', user
+        self.destroy_user(user)
+        print 'use', self.users
+        print 'ust', self.user_status
+
+    def userQuit(self, user, message):
+        print 'quit:', user
+        FluoBot.userQuit(self, user, message)
+        self.destroy_user(user)
+        print 'use', self.users
+        print 'ust', self.user_status
 
     def userRenamed(self, oldname, newname):
+        print 'rename %s -> %s' % (oldname, newname)
         FluoBot.userRenamed(self, oldname, newname)
-        self.user_status[newname.lower()] = self.user_status[oldname.lower()]
-        del self.user_status[oldname.lower()]
+        u = self.get_user(oldname)
+        u.nick = newname
+        del self.users[oldname.lower()]
+        self.users[newname.lower()] = u
+        print 'use', self.users
+        print 'ust', self.user_status
+        
+        #self.user_status[newname.lower()] = self.user_status[oldname.lower()]
+        #del self.user_status[oldname.lower()]
 
     def modeChanged(self, user, channel, set, modes, args):
         FluoBot.modeChanged(self, user, channel, set, modes, args)
@@ -153,12 +223,19 @@ class ChanAuthFluoBot(FluoBot):
             else: changes.append((c, adding))
         changes = changes[-len(args):]
         for (mode, adding), arg in zip(changes, args):
+            u = self.get_user(arg)
             maps = dict(q=5, a=4, o=3, h=2, v=1)
             if mode in maps:
+                perms = self.user_status[u]
                 if adding:
-                    self.user_status[arg.lower()].append(maps[mode])
+                    perms.append(maps[mode])
+                    #self.user_status[arg.lower()].append(maps[mode])
                 else:
-                    self.user_status[arg.lower()].remove(maps[mode])
+                    perms.remove(maps[mode])
+                    #self.user_status[arg.lower()].remove(maps[mode])
+                u.clearance = max(perms)
+        print 'use', self.users
+        print 'ust', self.user_status
 
 
 
