@@ -3,6 +3,7 @@ from __future__ import with_statement
 import re
 import os
 from copy import copy
+import util
 
 assignment_pattern = re.compile('^([a-zA-Z0-9_]*) *=.*$')
 
@@ -96,17 +97,17 @@ class Configurator(object):
         self.options = options
 
     def load(self, path, file = 'conf.py'):
-        curpath = os.path.curdir
-        os.chdir(path)
-        try:
+#         curpath = os.path.curdir
+        with util.indir(path):
+#             try:
             d = {}
             execfile(file, {}, d)
             d = self.filter_all(d)
-        finally:
-            os.chdir(curpath)
-        for k in self.options:
-            if k not in d:
-                raise Exception('Could not find a value for required option: %s' % k)
+#             finally:
+#                 os.chdir(curpath)
+            for k in self.options:
+                if k not in d:
+                    raise Exception('Could not find a value for required option: %s' % k)
         return d
 
     def filter(self, k, v, strict = False):

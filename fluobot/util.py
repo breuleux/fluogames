@@ -11,7 +11,7 @@ class indir(object):
         self.dir = dir
     
     def __enter__(self):
-        self.curdir = os.curdir
+        self.curdir = os.path.realpath(os.curdir)
         os.chdir(self.dir)
 
     def __exit__(self, type, value, traceback):

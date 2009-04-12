@@ -6,48 +6,6 @@ from fluobot import conf
 from fluobot import format
 
 
-#     catch_all_private = True
-
-#     @staticmethod
-#     def setup(db_dir):
-#         global prompt_source
-#         prompt_source = MultiPrompt(
-#             (0.45, FilePrompt(os.path.join(db_dir, 'witty', 'prompts.txt')), 'text'),
-#             (0.10, DirPrompt(os.path.join(db_dir, 'witty', 'ircquote')), 'ircquote'),
-#             (0.00, XVsYPrompt(os.path.join(db_dir, 'witty', 'rpsi.txt')), 'rpsi'),
-#             (0.45, DirPrompt(os.path.join(db_dir, 'witty', 'parametrized')), 'parametrized'),
-#             )
-    
-#     def __init__(self, manager, name, channel, arguments):
-#         super(Witty, self).__init__(manager, name, channel, arguments)
-#         self.submit_times = [30, 20, 10]
-#         self.min_vote_time = 30
-#         self.seconds_per_entry_vote = 5
-#         self.wait_times = [5]
-#         self.max_strikes = 2
-#         self.max_bonus = 3
-#         self.min_entries = 3
-#         self.color = dict(fg = 0, bg = 1)
-#         self.color_prompt_prefix = dict(fg = 4, bg = self.color['bg'])
-#         self.color_prompt = dict(fg = 8, bg = self.color['bg'])
-#         self.color_entrynum = dict(fg = 4, bg = self.color['bg'])
-#         self.color_entry = dict(fg = 9, bg = self.color['bg'])
-#         self.color_entry_vote = dict(fg = 11, bg = self.color['bg'])
-
-#     def start(self, info):
-#         if self.arguments:
-#             self.do_command(info, self.arguments[0], self.arguments[1:])
-#             self.manager.abort()
-#             return
-#         self.strikes = 0
-#         self.players = set()
-#         self.points = defaultdict(int)
-#         self.pts = []
-#         self.broadcast('A new game of Witty starts!', underline = True)
-#         self.switch(Submit)
-
-
-
 from collections import defaultdict
 
 
@@ -397,7 +355,9 @@ class WittyWait(WittyIdle):
     def on_switch_in(self):
         if self.strikes >= self.max_strikes:
             self.broadcast('Game canceled due to inactivity.')
-            self.manager.abort()
+            if not self.pts:
+                self.manager.abort()
+                return
         if self.pts:
             lead = self.pts[0][0]
             if lead >= self.points_to_win or self.strikes >= self.max_strikes:

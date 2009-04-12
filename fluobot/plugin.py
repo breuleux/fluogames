@@ -315,6 +315,14 @@ class ScheduledPlugin(ManagedPlugin):
     def schedule(self, timeouts, switch_to):
         self.timeouts = list(timeouts)
         self.switch_to = switch_to
+        if not switch_to:
+            self.callback = None
+        else:
+            self.callback = lambda: self.switch(self.switch_to)
+
+    def schedulef(self, timeouts, f):
+        self.timeouts = list(timeouts)
+        self.callback = f
 
     def timeout(self, *timeouts):
         self.schedule(timeouts, None)
@@ -329,11 +337,12 @@ class ScheduledPlugin(ManagedPlugin):
         if self.timeouts[0] == 0:
             self.timeouts[:1] = []
             if not self.timeouts:
-                if not self.switch_to:
+                if not self.callback:
                     self.broadcast('Time out!')
                     self.manager.abort()
                 else:
-                    self.switch(self.switch_to)
+                    self.callback()
+                    #self.switch(self.switch_to)
             else:
                 self.broadcast('%i seconds remaining!' % self.remaining())
 
