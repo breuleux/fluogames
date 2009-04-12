@@ -54,9 +54,9 @@ class FluoBot(irc.IRCClient):
         self.factory.bots.remove(self)
         irc.IRCClient.connectionLost(self, reason)
 
-    def lineReceived(self, line):
-        print line
-        irc.IRCClient.lineReceived(self, line)
+#     def lineReceived(self, line):
+#         print line
+#         irc.IRCClient.lineReceived(self, line)
 
     def irc_PONG(self, *args):
         pass

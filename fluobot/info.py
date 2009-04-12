@@ -34,6 +34,9 @@ class User(object):
     def __str__(self):
         return self.nick
 
+    def __len__(self):
+        return len(self.nick)
+    
     def __repr__(self):
         return '"%s!%s"' % (self.nick, self.host)
 
