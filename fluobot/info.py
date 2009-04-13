@@ -40,6 +40,9 @@ class User(object):
     def __repr__(self):
         return '"%s!%s"' % (self.nick, self.host)
 
+    def __cmp__(self, other):
+        return cmp(self.nick.lower(), other.nick.lower())
+    
 
 class Info(object):
     

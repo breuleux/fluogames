@@ -19,19 +19,32 @@ playing phase. Each element of the list marks a point where the
 user will be told how much time remains."""
                                ),
     
+    grid_change_time = conf.NumericOption(int, description =
+"""Number of seconds into a game during which the user can change the
+grid."""
+                                  ),
+    
     language =  conf.StringOption(description =
 """The default language for playing Boggle."""
                           ),
+
+    min_word_length = conf.NumericOption(int, description =
+"""Minimum length of the submitted words."""
+                                  ),
 
     width = conf.NumericOption(int, min = 4, max = 8, description =
 """Width of the grid."""
                                   ),
 
     height = conf.NumericOption(int, min = 4, max = 8, description =
-"""height of the grid."""
+"""Height of the grid."""
+                                  ),
+    
+    can_configure = conf.ObjectOption(description =
+"""List of configuration keys that can be configured when starting the
+game."""
                                   ),
     )
-
 
 lang_configurator = conf.Configurator(
     
@@ -55,18 +68,25 @@ want, you can download it yourself beforehand."""
 
 class BoggleIdle(plugin.ScheduledPlugin):
     """
-    Boggle!!!
+    Boggle is a word game where you are given a grid of letters and
+    you have to link them horizontally, vertically or diagonally to
+    form words. You score points for each word you find (more points
+    for longer words), but only if other players didn't find it as
+    well!
     """
 
     @classmethod
     def __phases__(self):
         return dict(idle = BoggleIdle,
                     playing = BogglePlay)
+
+    def reset_conf(self):
+        for k, v in self.conf.iteritems():
+            setattr(self, k, v)
     
     def setup(self):
         self.conf = configurator.load(self.loc)
-        for k, v in self.conf.iteritems():
-            setattr(self, k, v)
+        self.reset_conf()
         self._loaded_wordlists = {}
         self.lang_conf = {}
         with util.indir(self.loc):
@@ -114,48 +134,168 @@ class BoggleIdle(plugin.ScheduledPlugin):
     def show_grid(self):
         for row in self.grid:
             self.broadcast(' '.join(row))
-    
-    def __call__(self, info):
-        self.manager.start(self)
-        self.wordlist = self.load_wordlist(self.language)
-        self.broadcast('A new game of Boggle starts!', underline = True)
-        self.broadcast('Link the letters horizontally, vertically and diagonally on the grid below to form words. PM the bot with as many words as you can find. You can (and should) put more than one on each line, separated by spaces.')
-        letters = self.get_lang_conf(self.language)['letters']
-        self.grid = self.make_grid(letters, self.width, self.height)
 
-        self.show_grid()
-        
-        self.players = defaultdict(set)
-        self.found = set()
-        self.dups = set()
-        
-        self.schedulef(self.play_times, self.manager.abort)
-        self.broadcast('You have %s seconds.' % self.remaining())
+    def show_grid_priv(self, info):
+        for row in self.grid:
+            info.reply(' '.join(row))
+
+    @plugin.require_public
+    def __call__(self, info, *configure):
+        self.reset_conf()
+        for entry in configure:
+            try:
+                k, v = entry.split('=')
+            except:
+                raise util.UsageError('The parameters must be of the form key=value, with key in: %s' % ', '.join(self.can_configure))
+            if k not in self.can_configure:
+                raise util.UsageError('Cannot configure parameter %s (it might not exist).' % k)
+            try:
+                setattr(self, k, configurator.filter(k, v, strict = True))
+            except Exception, e:
+                raise util.UsageError('Error configuring %s: %s' % (k, e.message))
+            
+        self.wordlist = self.load_wordlist(self.language)
+        self.manager.start(self)
+        self.broadcast('A new game of Boggle starts!', underline = True)
+        self.broadcast(format.blockify(
+                """
+                Link the letters horizontally, vertically and diagonally
+                on the grid below to form words. PM the bot with as many
+                words as you can find. You can (and should) put more than
+                one on each line, separated by spaces. The minimum length
+                for a word to be accepted is $B%s$B.
+                """
+                ) % self.min_word_length)
         self.switch(BogglePlay)
 
 
 class BogglePlay(BoggleIdle):
+    """
+    Link the letters horizontally, vertically and diagonally on the
+    grid of letters (you can type !grid to see it). PM the bot with as
+    many words as you can find. You can (and should) put more than one
+    on each line, separated by spaces. Type !words to check what words
+    you've found so far.
+    """
 
     catchall_private = True
 
+    def on_switch_in(self):
+        letters = self.get_lang_conf(self.language)['letters']
+        self.grid = self.make_grid(letters, self.width, self.height)
+
+        self.show_grid()
+
+        self.submit_queue = defaultdict(list)
+        
+        self.players = defaultdict(set)
+        self.found = set()
+        self.dups = set()
+
+        self.total_time = sum(self.play_times)
+        self.schedulef(self.play_times, self.manager.abort)
+        self.broadcast('You have %s seconds.' % self.remaining())
+
     def on_switch_out(self):
+        self.empty_queue()
         scores = []
-        for player, words in self.players.iteritems():
-            words.difference_update(self.dups)
+        p = list(self.players.iteritems())
+        p.sort()
+        for player, words in p:
             if words:
-                words = list(words)
-                words.sort(key = lambda x: (-len(x), x))
-                self.broadcast('$B%s$B found: $B%s$B' % (player, " ".join(words)))
-                scores.append((len(words), player))
-        if self.dups:
-            words = list(self.dups)
-            words.sort(key = lambda x: (-len(x), x))
-            self.broadcast('More than one player found: $B%s$B' % ' '.join(words))
+                n, score = self.score_words(words, self.dups)
+                self.broadcast('$B%s$B found: %s (%s unique words for %s points)' \
+                                   % (player, self.format_words(words, self.dups), n, score))
+                scores.append((score, player))
+#             words.difference_update(self.dups)
+#             if words:
+#                 words = list(words)
+#                 words.sort(key = lambda x: (-len(x), x))
+#                 self.broadcast('$B%s$B found: $B%s$B' % (player, " ".join(words)))
+#                 scores.append((len(words), player))
+#         if self.dups:
+#             words = list(self.dups)
+#             words.sort(key = lambda x: (-len(x), x))
+#             self.broadcast('More than one player found: $B%s$B' % ' '.join(words))
         scores.sort()
         if scores:
             self.broadcast('$BScores:$B %s'
                            % ', '.join('%s: %s' % (player, score)
                                        for score, player in reversed(scores)))
+    
+    def command_grid(self, info):
+        """
+        Usage: $Bgrid$B
+
+        Show the grid of letters.
+        """
+        if info.public:
+            self.show_grid()
+        else:
+            self.show_grid_priv(info)
+
+    def command_words(self, info):
+        """
+        Usage: $Bwords$B
+
+        Show all the words you found so far in this round.
+        """
+        words = self.players[info.user]
+        if not words:
+            info.reply('You found no words.')
+        else:
+            n, score = self.score_words(words, self.dups)
+            info.reply('%s (%s words for %s points)'
+                       % (self.format_words(words, self.dups), n, score))
+#             words = list(words)
+#             words.sort(key = lambda x: (-len(x), x))
+#             info.reply('You found $B%s$B words: %s' % (len(words), ' '.join(words)))
+
+    @plugin.restrict(1)
+    def command_newgrid(self, info):
+        """
+        Usage: $Bnewgrid$B
+
+        Generate a new grid.
+        """
+        if (self.total_time - self.remaining()) > self.grid_change_time:
+            info.reply('You can only change the grid in the first %s seconds of the game.' % self.grid_change_time)
+        else:
+            self.switch(BogglePlay)
+            
+    def on_privmsg(self, info, message):
+        if info.private:
+            if not message[0].isalpha():
+                return super(BogglePlay, self).on_privmsg(info, message)
+            words = message.split(" ")
+            self.submit_queue[info.user] += words
+            #self.empty_queue()
+        else:
+            super(BogglePlay, self).on_privmsg(info, message)
+
+    def empty_queue(self):
+        for user, words in self.submit_queue.iteritems():
+            valid, invalid, alreadyfound = self.submit_words(user, words)
+            def colorize(word):
+                if word in valid:
+                    return format.format(word, bold = True, fg = 3)
+                elif word in alreadyfound:
+                    return format.format(word, bold = False, fg = 6)
+                else:
+                    return format.format(word, bold = False, fg = 4)
+            self.notice(user,
+                        '%s - %s/%s valid and new (your total: %s words)' \
+                            % (' '.join(map(colorize, words)),
+                               len(valid),
+                               len(words),
+                               len(self.players[user])))
+            
+        self.submit_queue = defaultdict(list)
+
+    def tick(self):
+        if self.remaining() % 5 == 0:
+            self.empty_queue()
+        super(BogglePlay, self).tick()
 
     def is_on_grid(self, word):
         letters = list(word)
@@ -194,10 +334,7 @@ class BogglePlay(BoggleIdle):
         return False
 
     def valid(self, word):
-        return len(word) >= 3 and word in self.wordlist and self.is_on_grid(word)
-    
-    def command_grid(self, info):
-        self.show_grid()
+        return len(word) >= self.min_word_length and word in self.wordlist and self.is_on_grid(word)
 
     def submit_words(self, user, words):
         userwords = self.players[user]
@@ -208,6 +345,7 @@ class BogglePlay(BoggleIdle):
             if word in userwords:
                 alreadyfound.add(word)
             elif word in self.found:
+                userwords.add(word)
                 valid.add(word)
                 self.dups.add(word)
             elif self.valid(word):
@@ -227,35 +365,32 @@ class BogglePlay(BoggleIdle):
 #         self.broadcast(" ".join(map(colorize, words)))
 #         #self.broadcast(str([(word, word in self.wordlist, self.is_on_grid(word)) for word in words]))
 
-    def command_words(self, info):
-        words = self.players[info.user]
-        if not words:
-            info.reply('You found no words.')
-        else:
-            words = list(words)
-            words.sort(key = lambda x: (-len(x), x))
-            info.reply('You found $B%s$B words: %s' % (len(words), ' '.join(words)))
-    
-    def on_privmsg(self, info, message):
-        if info.private:
-            if not message[0].isalpha():
-                super(BogglePlay, self).on_privmsg(info, message)
-            words = message.split(" ")
-            valid, invalid, alreadyfound = self.submit_words(info.user, words)
-            def colorize(word):
-                if word in valid:
-                    return format.format(word, bold = True, fg = 3)
-                elif word in alreadyfound:
-                    return format.format(word, bold = False, fg = 6)
-                else:
-                    return format.format(word, bold = False, fg = 4)
-            info.reply('%s - %s/%s valid and new (your total: %s words)' \
-                           % (' '.join(map(colorize, words)),
-                              len(valid),
-                              len(words),
-                              len(self.players[info.user])))
-        else:
-            super(BogglePlay, self).on_privmsg(info, message)
+    def format_words(self, words, dups):
+        by_len = defaultdict(list)
+        for word in words:
+            by_len[len(word)].append(word)
+        s = []
+        def colorize(word): 
+            if word in dups:
+                return format.format(word, bold = False)
+            else:
+                return format.format(word, bold = True)
+        l = list(by_len.iteritems())
+        l.sort()
+        l.reverse()
+        for n, words in l:
+            words.sort()
+            s.append(' '.join(map(colorize, words)))
+        return '[%s]' % ' | '.join(s)
+
+    def score_words(self, words, dups):
+        score = 0
+        n = 0
+        for word in words:
+            if word not in dups:
+                n += 1
+                score += (len(word) - self.min_word_length + 1)
+        return n, score
 
 
 __fluostart__ = BoggleIdle

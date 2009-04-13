@@ -134,7 +134,7 @@ class ChanAuthFluoBot(FluoBot):
     def get_user(self, user):
         u = FluoBot.get_user(self, user)
         if u.nick.lower() not in self.user_status:
-            return u
+            return None
         u.clearance = max(self.user_status[u.nick.lower()])
         return u
 

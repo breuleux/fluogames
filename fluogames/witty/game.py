@@ -365,7 +365,7 @@ class WittyWait(WittyIdle):
                 if len(winners) == 1:
                     self.broadcast('Winner: %s' % winners[0])
                 else:
-                    self.broadcast('Winners: %s' % ', '.join(winners))
+                    self.broadcast('Winners: %s' % ', '.join(map(str, winners)))
                 self.manager.abort()
                 return
         if self.manager.game is self:
