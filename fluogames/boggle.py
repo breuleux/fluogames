@@ -163,9 +163,9 @@ class BoggleIdle(plugin.ScheduledPlugin):
                 on the grid below to form words. PM the bot with as many
                 words as you can find. You can (and should) put more than
                 one on each line, separated by spaces. The minimum length
-                for a word to be accepted is $B%s$B.
+                for a word to be accepted is $B%s$B. Language is $B%s$B.
                 """
-                ) % self.min_word_length)
+                ) % (self.min_word_length, self.language))
         self.switch(BogglePlay)
 
 
@@ -207,16 +207,6 @@ class BogglePlay(BoggleIdle):
                 self.broadcast('$B%s$B found: %s (%s unique words for %s points)' \
                                    % (player, self.format_words(words, self.dups), n, score))
                 scores.append((score, player))
-#             words.difference_update(self.dups)
-#             if words:
-#                 words = list(words)
-#                 words.sort(key = lambda x: (-len(x), x))
-#                 self.broadcast('$B%s$B found: $B%s$B' % (player, " ".join(words)))
-#                 scores.append((len(words), player))
-#         if self.dups:
-#             words = list(self.dups)
-#             words.sort(key = lambda x: (-len(x), x))
-#             self.broadcast('More than one player found: $B%s$B' % ' '.join(words))
         scores.sort()
         if scores:
             self.broadcast('$BScores:$B %s'
@@ -247,9 +237,27 @@ class BogglePlay(BoggleIdle):
             n, score = self.score_words(words, self.dups)
             info.reply('%s (%s words for %s points)'
                        % (self.format_words(words, self.dups), n, score))
-#             words = list(words)
-#             words.sort(key = lambda x: (-len(x), x))
-#             info.reply('You found $B%s$B words: %s' % (len(words), ' '.join(words)))
+            
+    def command_check(self, info, word):
+        """
+        Usage: $Bcheck <word>$B
+        
+        Check if the word is in the dictionary, that it is on the grid
+        and that it is long enough. You can use this during the game
+        if you want to know why one of your words was rejected.
+        """
+        if word not in self.wordlist:
+            info.reply('%s is not in the %s wordlist.' % (format.format(word, fg = 4), self.language))
+
+        elif not self.is_on_grid(word):
+            info.reply('%s is a word, but it cannot be formed on the grid.' % format.format(word, fg = 4))
+
+        elif len(word) >= self.min_word_length:
+            info.reply('%s is a word and can be found on the grid, but it is not long enough (it needs to be at least $B%s$B letters long).'
+                       % (format.format(word, fg = 4), self.min_word_length))
+
+        else:
+            info.reply('%s is valid and worth $B%s$B points.' % (format.format(word, bold = True, fg = 3), len(word) - self.min_word_length + 1))
 
     @plugin.restrict(1)
     def command_newgrid(self, info):
@@ -294,6 +302,9 @@ class BogglePlay(BoggleIdle):
 
     def tick(self):
         if self.remaining() % 5 == 0:
+            # We only submit the words every 5 seconds, that way the
+            # bot doesn't flood out from giving feedback when people
+            # submit one word per line.
             self.empty_queue()
         super(BogglePlay, self).tick()
 
@@ -356,15 +367,6 @@ class BogglePlay(BoggleIdle):
                 invalid.add(word)
         return valid, invalid, alreadyfound
         
-#     def command_check(self, info, *words):
-#         def colorize(word):
-#             if self.valid(word):
-#                 return format.format(word, bold = True, fg = 3)
-#             else:
-#                 return format.format(word, bold = False, fg = 4)
-#         self.broadcast(" ".join(map(colorize, words)))
-#         #self.broadcast(str([(word, word in self.wordlist, self.is_on_grid(word)) for word in words]))
-
     def format_words(self, words, dups):
         by_len = defaultdict(list)
         for word in words:
