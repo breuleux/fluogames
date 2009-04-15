@@ -9,6 +9,7 @@ from prompt import pjoin
 
 from collections import defaultdict
 
+import os
 
 
 configurator = conf.Configurator(
