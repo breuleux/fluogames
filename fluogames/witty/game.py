@@ -5,12 +5,10 @@ from fluobot import plugin
 from fluobot import conf
 from fluobot import format
 
+from prompt import pjoin
 
 from collections import defaultdict
 
-
-def pjoin(prompt):
-    return ' '.join(prompt)
 
 
 configurator = conf.Configurator(

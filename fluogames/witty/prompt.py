@@ -6,6 +6,10 @@ from fluobot import util
 from collections import defaultdict
 
 
+def pjoin(prompt):
+    return ' '.join(prompt)
+
+
 class PromptSource(object):
     def generate(self, game):
         raise NotImplementedError

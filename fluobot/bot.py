@@ -333,13 +333,6 @@ can have multi-character prefixes, but put the longer prefixes
 before. If public_prefix = ' ' or if it ends with a space, then no
 prefix will be needed to use commands."""
                                  ),
-
-    auth = StringOption(description =
-"""Module to use to identify nicknames to an account and
-to handle their permissions.
-fluobot.auth.natural requires no logging in and uses
- operator status in order to grant permissions"""
-                        ),
     )
 
 conf_defaults = dict(

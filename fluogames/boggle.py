@@ -246,18 +246,21 @@ class BogglePlay(BoggleIdle):
         and that it is long enough. You can use this during the game
         if you want to know why one of your words was rejected.
         """
+        word = word.lower()
+        
         if word not in self.wordlist:
             info.reply('%s is not in the %s wordlist.' % (format.format(word, fg = 4), self.language))
 
         elif not self.is_on_grid(word):
             info.reply('%s is a word, but it cannot be formed on the grid.' % format.format(word, fg = 4))
 
-        elif len(word) >= self.min_word_length:
+        elif len(word) < self.min_word_length:
             info.reply('%s is a word and can be found on the grid, but it is not long enough (it needs to be at least $B%s$B letters long).'
                        % (format.format(word, fg = 4), self.min_word_length))
 
         else:
-            info.reply('%s is valid and worth $B%s$B points.' % (format.format(word, bold = True, fg = 3), len(word) - self.min_word_length + 1))
+            pts = len(word) - self.min_word_length + 1
+            info.reply('%s is valid and worth $B%s$B point%s.' % (format.format(word, bold = True, fg = 3), pts, 's' if pts > 1 else ''))
 
     @plugin.restrict(1)
     def command_newgrid(self, info):
@@ -275,7 +278,7 @@ class BogglePlay(BoggleIdle):
         if info.private:
             if not message[0].isalpha():
                 return super(BogglePlay, self).on_privmsg(info, message)
-            words = message.split(" ")
+            words = map(str.lower, message.split(" "))
             self.submit_queue[info.user] += words
             #self.empty_queue()
         else:
