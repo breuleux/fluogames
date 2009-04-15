@@ -29,7 +29,7 @@ grid."""
                           ),
 
     min_word_length = conf.NumericOption(int, description =
-"""Minimum length of the submitted words."""
+"""Minimum length that the submitted words must have to be accepted."""
                                   ),
 
     width = conf.NumericOption(int, min = 4, max = 8, description =
@@ -85,7 +85,10 @@ class BoggleIdle(plugin.ScheduledPlugin):
             setattr(self, k, v)
     
     def setup(self):
-        self.conf = configurator.load(self.loc)
+        try:
+            self.conf = configurator.load(self.loc)
+        except IOError:
+            raise IOError('A conf.py file is required for the %s game (fluogames.boggle) in %s' % (self.name, os.path.join(self.loc, 'conf.py')))
         self.reset_conf()
         self._loaded_wordlists = {}
         self.lang_conf = {}

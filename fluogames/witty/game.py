@@ -110,7 +110,10 @@ class WittyIdle(plugin.ScheduledPlugin):
                     waiting = WittyWait)
     
     def setup(self):
-        self.conf = configurator.load(self.loc)
+        try:
+            self.conf = configurator.load(self.loc)
+        except IOError:
+            raise IOError('A conf.py file is required for the %s game (fluogames.witty) in %s' % (self.name, os.path.join(self.loc, 'conf.py')))
         for k, v in self.conf.iteritems():
             setattr(self, k, v)
 
